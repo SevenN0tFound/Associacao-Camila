@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -37,6 +38,15 @@ android {
 }
 
 dependencies {
+    // ... deixe as dependências que já estão aqui (compose, etc.) ...
+
+    // Firebase BoM (gerencia as versões compatíveis automaticamente)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+
+    // Bibliotecas do Firebase
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
