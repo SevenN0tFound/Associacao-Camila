@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -78,6 +78,8 @@ import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
 import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
+import com.associacaocamila.app.ui.student.StudentAttendanceScreen
+import com.associacaocamila.app.ui.student.StudentWorkshopsScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaBlue
@@ -97,7 +99,8 @@ sealed class NavigationItem(
     val icon: ImageVector,
 ) {
     data object Inicio : NavigationItem("inicio", "Início", Icons.Default.Home)
-    data object Atividades : NavigationItem("oficinas", "Oficinas", Icons.Default.DateRange)
+    data object MinhasOficinas : NavigationItem("minhas_oficinas", "Minhas Oficinas", Icons.Default.DateRange)
+    data object Frequencia : NavigationItem("frequencia", "Frequência", Icons.Default.Assessment)
     data object Chamada : NavigationItem("chamada", "Chamada", Icons.Default.CheckCircle)
     data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
     data object Turmas : NavigationItem("turmas", "Turmas", Icons.Default.School)
@@ -116,7 +119,10 @@ fun HomeScreen(
         buildList {
             add(NavigationItem.Inicio)
             when (currentUser.role) {
-                UserRole.ALUNO, UserRole.RESPONSAVEL -> add(NavigationItem.Atividades)
+                UserRole.ALUNO, UserRole.RESPONSAVEL -> {
+                    add(NavigationItem.MinhasOficinas)
+                    add(NavigationItem.Frequencia)
+                }
                 UserRole.PROFESSOR -> add(NavigationItem.Chamada)
                 UserRole.ADMIN -> {
                     add(NavigationItem.Aprovacoes)
@@ -124,6 +130,14 @@ fun HomeScreen(
                 }
             }
             add(NavigationItem.Perfil)
+        }
+    }
+
+    val targetStudentId = remember(currentUser) {
+        if ((currentUser.role == UserRole.RESPONSAVEL) && currentUser.associatedStudentIds.isNotEmpty()) {
+            currentUser.associatedStudentIds.first()
+        } else {
+            currentUser.id
         }
     }
 
@@ -141,7 +155,7 @@ fun HomeScreen(
             ModalDrawerSheet(
                 drawerContainerColor = Color.White,
                 drawerTonalElevation = 0.dp,
-                modifier = Modifier.width(320.dp)
+                modifier = Modifier.width(320.dp),
             ) {
                 Column(
                     modifier = Modifier.fillMaxHeight()
@@ -340,7 +354,8 @@ fun HomeScreen(
             ) { navItem ->
                 when (navItem) {
                     is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
-                    is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
+                    is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(studentId = targetStudentId)
+                    is NavigationItem.Frequencia -> StudentAttendanceScreen(studentId = targetStudentId)
                     is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
                     is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()
@@ -522,25 +537,6 @@ private fun NoticeCard(
 }
 
 @Composable
-private fun OficinasTabContent(
-    currentUser: User,
-    modifier: Modifier = Modifier,
-) {
-    PlaceholderCard(
-        modifier = modifier,
-        icon = Icons.Default.DateRange,
-        iconTint = CamilaOrange,
-        title = "Oficinas e Projetos",
-        subtitle = if (currentUser.role == UserRole.RESPONSAVEL) {
-            "Consulte os projetos cadastrados e o registo de frequência dos estudantes vinculados à sua responsabilidade."
-        } else {
-            "Acompanhe as suas oficinas ativas, horários e registos de participação na Associação Camila."
-        },
-        infoText = "Módulo de acompanhamento pedagógico e frequência em fase de integração."
-    )
-}
-
-@Composable
 private fun PerfilTabContent(
     currentUser: User,
     onLogout: () -> Unit,
@@ -681,100 +677,6 @@ private fun ProfileInfoRow(
     }
 }
 
-@Composable
-private fun PlaceholderCard(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    infoText: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = CamilaGreenDark,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CamilaGray,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 22.sp
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(CamilaGreen.copy(alpha = 0.08f))
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = CamilaGreen,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = infoText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = CamilaGreenDark
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 private fun UserRole.toDisplayName(): String = when (this) {
     UserRole.ADMIN -> "ADMIN"
     UserRole.PROFESSOR -> "Professor"
@@ -826,6 +728,24 @@ private fun HomeScreenDrawerPreview() {
                 name = "Maria Coordenadora",
                 email = "maria@associacaocamila.org",
                 role = UserRole.ADMIN,
+                status = UserStatus.APPROVED
+            ),
+            onLogout = {},
+            initialDrawerValue = DrawerValue.Open
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenStudentDrawerPreview() {
+    AssociacaoCamilaTheme {
+        HomeScreen(
+            currentUser = User(
+                id = "2",
+                name = "Lucas Aluno",
+                email = "lucas@associacaocamila.org",
+                role = UserRole.ALUNO,
                 status = UserStatus.APPROVED
             ),
             onLogout = {},
