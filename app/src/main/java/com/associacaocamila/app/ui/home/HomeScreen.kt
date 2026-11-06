@@ -76,16 +76,20 @@ import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
 
-private sealed class HomeNavItem(
+/**
+ * Representa os itens de navegação da barra inferior com controle
+ * dinâmico de visibilidade por perfil institucional.
+ */
+sealed class NavigationItem(
     val route: String,
     val title: String,
-    val icon: ImageVector
+    val icon: ImageVector,
 ) {
-    data object Home : HomeNavItem("home", "Início", Icons.Default.Home)
-    data object Frequency : HomeNavItem("frequency", "Frequência", Icons.Default.DateRange)
-    data object Attendance : HomeNavItem("attendance", "Chamada", Icons.Default.CheckCircle)
-    data object Approvals : HomeNavItem("approvals", "Aprovações", Icons.Default.Check)
-    data object Profile : HomeNavItem("profile", "Perfil", Icons.Default.Person)
+    data object Inicio : NavigationItem("inicio", "Início", Icons.Default.Home)
+    data object Atividades : NavigationItem("oficinas", "Oficinas", Icons.Default.DateRange)
+    data object Chamada : NavigationItem("chamada", "Chamada", Icons.Default.CheckCircle)
+    data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
+    data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,25 +97,25 @@ private sealed class HomeNavItem(
 fun HomeScreen(
     currentUser: User,
     onLogout: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val navItems = remember(currentUser.role) {
         buildList {
-            add(HomeNavItem.Home)
+            add(NavigationItem.Inicio)
             when (currentUser.role) {
-                UserRole.ALUNO, UserRole.RESPONSAVEL -> add(HomeNavItem.Frequency)
-                UserRole.PROFESSOR -> add(HomeNavItem.Attendance)
-                UserRole.ADMIN -> add(HomeNavItem.Approvals)
+                UserRole.ALUNO, UserRole.RESPONSAVEL -> add(NavigationItem.Atividades)
+                UserRole.PROFESSOR -> add(NavigationItem.Chamada)
+                UserRole.ADMIN -> add(NavigationItem.Aprovacoes)
             }
-            add(HomeNavItem.Profile)
+            add(NavigationItem.Perfil)
         }
     }
 
-    var selectedItemRoute by rememberSaveable(currentUser.role) {
-        mutableStateOf(HomeNavItem.Home.route)
+    var selectedRoute by rememberSaveable(currentUser.role) {
+        mutableStateOf(NavigationItem.Inicio.route)
     }
 
-    val currentNavItem = navItems.firstOrNull { it.route == selectedItemRoute } ?: HomeNavItem.Home
+    val currentItem = navItems.firstOrNull { it.route == selectedRoute } ?: NavigationItem.Inicio
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -128,13 +132,13 @@ fun HomeScreen(
                             color = CamilaGreenDark
                         )
                         Text(
-                            text = currentNavItem.title,
+                            text = currentItem.title,
                             style = MaterialTheme.typography.labelMedium,
                             color = CamilaGray
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White
                 )
             )
@@ -145,10 +149,10 @@ fun HomeScreen(
                 tonalElevation = 8.dp
             ) {
                 navItems.forEach { item ->
-                    val isSelected = item.route == currentNavItem.route
+                    val isSelected = item.route == currentItem.route
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = { selectedItemRoute = item.route },
+                        onClick = { selectedRoute = item.route },
                         icon = {
                             Icon(
                                 imageVector = item.icon,
@@ -174,7 +178,7 @@ fun HomeScreen(
         }
     ) { innerPadding ->
         AnimatedContent(
-            targetState = currentNavItem,
+            targetState = currentItem,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             modifier = Modifier
                 .fillMaxSize()
@@ -182,11 +186,11 @@ fun HomeScreen(
             label = "home_tab_animation"
         ) { navItem ->
             when (navItem) {
-                is HomeNavItem.Home -> HomeTabContent(currentUser = currentUser)
-                is HomeNavItem.Frequency -> FrequencyTabContent(currentUser = currentUser)
-                is HomeNavItem.Attendance -> AttendanceTabContent(currentUser = currentUser)
-                is HomeNavItem.Approvals -> ApprovalsTabContent()
-                is HomeNavItem.Profile -> ProfileTabContent(
+                is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
+                is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
+                is NavigationItem.Chamada -> ChamadaTabContent(currentUser = currentUser)
+                is NavigationItem.Aprovacoes -> AprovacoesTabContent()
+                is NavigationItem.Perfil -> PerfilTabContent(
                     currentUser = currentUser,
                     onLogout = onLogout
                 )
@@ -196,7 +200,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeTabContent(
+private fun InicioTabContent(
     currentUser: User,
     modifier: Modifier = Modifier
 ) {
@@ -207,6 +211,7 @@ private fun HomeTabContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Card de Boas-vindas personalizado
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -222,7 +227,7 @@ private fun HomeTabContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(50.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
@@ -246,13 +251,14 @@ private fun HomeTabContent(
                         Text(
                             text = "Perfil: ${currentUser.role.toDisplayName()}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f)
+                            color = Color.White.copy(alpha = 0.9f)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Card com o lema institucional
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -273,6 +279,7 @@ private fun HomeTabContent(
             }
         }
 
+        // Seção com avisos e oficinas recentes
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = 8.dp)
@@ -284,7 +291,7 @@ private fun HomeTabContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Avisos Institucionais",
+                text = "Avisos e Oficinas em Destaque",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 ),
@@ -293,20 +300,20 @@ private fun HomeTabContent(
         }
 
         NoticeCard(
-            title = "Início do Semestre Letivo",
-            description = "As oficinas e projetos sociais já estão a decorrer! Consulte horários e presenças com a coordenação.",
+            title = "Oficina de Fortalecimento",
+            description = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
             badgeColor = CamilaOrange
         )
 
         NoticeCard(
-            title = "Plantão da Assistência Social",
-            description = "Atendimentos e acolhimento para responsáveis e alunos às terças e quintas-feiras.",
+            title = "Projeto Mídias Force",
+            description = "Capacitação prática em comunicação, audiovisual e produção de conteúdo digital.",
             badgeColor = CamilaBlue
         )
 
         NoticeCard(
-            title = "Projetos Fortalecimento & Mídias Force",
-            description = "Inscrições abertas para as novas turmas de capacitação juvenil e tecnológica.",
+            title = "Acolhimento e Assistência Social",
+            description = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipa técnica.",
             badgeColor = CamilaGreenDark
         )
     }
@@ -360,7 +367,7 @@ private fun NoticeCard(
 }
 
 @Composable
-private fun FrequencyTabContent(
+private fun OficinasTabContent(
     currentUser: User,
     modifier: Modifier = Modifier
 ) {
@@ -368,18 +375,18 @@ private fun FrequencyTabContent(
         modifier = modifier,
         icon = Icons.Default.DateRange,
         iconTint = CamilaOrange,
-        title = "Frequência e Oficinas",
+        title = "Oficinas e Projetos",
         subtitle = if (currentUser.role == UserRole.RESPONSAVEL) {
-            "Consulte os registos de presença e participação dos alunos associados às oficinas da ONG."
+            "Consulte os projetos cadastrados e o registo de frequência dos estudantes vinculados à sua responsabilidade."
         } else {
-            "Acompanhe as suas presenças nas oficinas e atividades da Associação Camila."
+            "Acompanhe as suas oficinas ativas, horários e registos de participação na Associação Camila."
         },
-        infoText = "Módulo de acompanhamento de frequência em integração com o sistema acadêmico."
+        infoText = "Módulo de acompanhamento pedagógico e frequência em fase de integração."
     )
 }
 
 @Composable
-private fun AttendanceTabContent(
+private fun ChamadaTabContent(
     currentUser: User,
     modifier: Modifier = Modifier
 ) {
@@ -388,13 +395,13 @@ private fun AttendanceTabContent(
         icon = Icons.Default.CheckCircle,
         iconTint = CamilaGreen,
         title = "Chamada e Registo de Presença",
-        subtitle = "Professor(a) ${currentUser.name}, aqui poderá registar a presença diária e o desenvolvimento dos alunos nas turmas.",
-        infoText = "Módulo de chamada rápida e relatórios de frequência em preparação para os professores."
+        subtitle = "Olá, Professor(a) ${currentUser.name}. Aqui poderá gerir as listas de chamada das turmas e registar as presenças das oficinas.",
+        infoText = "Módulo para docentes com registo ágil de frequência em fase de disponibilização."
     )
 }
 
 @Composable
-private fun ApprovalsTabContent(
+private fun AprovacoesTabContent(
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -431,7 +438,7 @@ private fun ApprovalsTabContent(
                         color = CamilaGreenDark
                     )
                     Text(
-                        text = "Área restrita à diretoria institucional",
+                        text = "Módulo restrito à administração institucional",
                         style = MaterialTheme.typography.bodySmall,
                         color = CamilaGray
                     )
@@ -465,7 +472,7 @@ private fun ApprovalsTabContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Aqui serão listados os novos cadastros com status PENDENTE para validação da direção da Associação Camila, permitindo aprovar ou reprovar o acesso ao aplicativo.",
+                    text = "Aqui serão listados os novos cadastros com status PENDENTE para validação da direção da Associação Camila, permitindo aprovar ou rejeitar o acesso ao aplicativo.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = CamilaGray,
                     textAlign = TextAlign.Center,
@@ -477,7 +484,7 @@ private fun ApprovalsTabContent(
 }
 
 @Composable
-private fun ProfileTabContent(
+private fun PerfilTabContent(
     currentUser: User,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
@@ -531,12 +538,12 @@ private fun ProfileTabContent(
                 )
                 ProfileInfoRow(
                     icon = Icons.Default.Badge,
-                    label = "Perfil de Acesso",
+                    label = "Tipo de Conta",
                     value = currentUser.role.toDisplayName()
                 )
                 ProfileInfoRow(
                     icon = Icons.Default.School,
-                    label = "Estado da Conta",
+                    label = "Status da Conta",
                     value = when (currentUser.status) {
                         UserStatus.APPROVED -> "Aprovado"
                         UserStatus.PENDING -> "Pendente de Análise"
@@ -712,7 +719,7 @@ private fun PlaceholderCard(
 }
 
 private fun UserRole.toDisplayName(): String = when (this) {
-    UserRole.ADMIN -> "Administrador"
+    UserRole.ADMIN -> "ADMIN"
     UserRole.PROFESSOR -> "Professor"
     UserRole.RESPONSAVEL -> "Responsável"
     UserRole.ALUNO -> "Aluno"
