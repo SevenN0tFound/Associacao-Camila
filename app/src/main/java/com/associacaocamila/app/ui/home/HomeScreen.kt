@@ -67,6 +67,7 @@ import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
+import com.associacaocamila.app.ui.attendance.AttendanceScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaBlue
@@ -187,7 +188,7 @@ fun HomeScreen(
             when (navItem) {
                 is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
                 is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
-                is NavigationItem.Chamada -> ChamadaTabContent(currentUser = currentUser)
+                is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
                 is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                 is NavigationItem.Perfil -> PerfilTabContent(
                     currentUser = currentUser,
@@ -381,21 +382,6 @@ private fun OficinasTabContent(
             "Acompanhe as suas oficinas ativas, horários e registos de participação na Associação Camila."
         },
         infoText = "Módulo de acompanhamento pedagógico e frequência em fase de integração."
-    )
-}
-
-@Composable
-private fun ChamadaTabContent(
-    currentUser: User,
-    modifier: Modifier = Modifier
-) {
-    PlaceholderCard(
-        modifier = modifier,
-        icon = Icons.Default.CheckCircle,
-        iconTint = CamilaGreen,
-        title = "Chamada e Registo de Presença",
-        subtitle = "Olá, Professor(a) ${currentUser.name}. Aqui poderá gerir as listas de chamada das turmas e registar as presenças das oficinas.",
-        infoText = "Módulo para docentes com registo ágil de frequência em fase de disponibilização."
     )
 }
 
