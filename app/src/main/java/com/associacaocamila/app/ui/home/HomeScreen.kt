@@ -67,6 +67,7 @@ import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
+import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
@@ -89,6 +90,7 @@ sealed class NavigationItem(
     data object Atividades : NavigationItem("oficinas", "Oficinas", Icons.Default.DateRange)
     data object Chamada : NavigationItem("chamada", "Chamada", Icons.Default.CheckCircle)
     data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
+    data object Turmas : NavigationItem("turmas", "Turmas", Icons.Default.School)
     data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
 }
 
@@ -105,7 +107,10 @@ fun HomeScreen(
             when (currentUser.role) {
                 UserRole.ALUNO, UserRole.RESPONSAVEL -> add(NavigationItem.Atividades)
                 UserRole.PROFESSOR -> add(NavigationItem.Chamada)
-                UserRole.ADMIN -> add(NavigationItem.Aprovacoes)
+                UserRole.ADMIN -> {
+                    add(NavigationItem.Aprovacoes)
+                    add(NavigationItem.Turmas)
+                }
             }
             add(NavigationItem.Perfil)
         }
@@ -190,6 +195,7 @@ fun HomeScreen(
                 is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
                 is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
                 is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
+                is NavigationItem.Turmas -> AdminWorkshopsScreen()
                 is NavigationItem.Perfil -> PerfilTabContent(
                     currentUser = currentUser,
                     onLogout = onLogout
