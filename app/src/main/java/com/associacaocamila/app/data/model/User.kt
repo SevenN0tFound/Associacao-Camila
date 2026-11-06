@@ -12,6 +12,7 @@ data class User(
     val birthDate: String = "",
     val address: String = "",
     val medicalNotes: String = "", // Alergias, remédios contínuos ou observações
+    val dependents: List<Dependent> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
 )
 

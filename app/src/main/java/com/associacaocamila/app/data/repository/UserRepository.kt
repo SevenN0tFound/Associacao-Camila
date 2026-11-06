@@ -1,7 +1,9 @@
 package com.associacaocamila.app.data.repository
 
+import com.associacaocamila.app.data.model.Dependent
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserStatus
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -10,8 +12,10 @@ import kotlinx.coroutines.tasks.await
 
 interface UserRepository {
     fun getPendingUsers(): Flow<List<User>>
+    fun getApprovedUsers(): Flow<List<User>>
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
     suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
+    suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit>
 }
 
 class UserRepositoryImpl(
@@ -22,6 +26,21 @@ class UserRepositoryImpl(
 
     override fun getPendingUsers(): Flow<List<User>> = callbackFlow {
         val query = usersCollection.whereEqualTo("status", UserStatus.PENDING.name)
+        val registration = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                close(error)
+                return@addSnapshotListener
+            }
+            val users = snapshot?.documents?.mapNotNull { doc ->
+                doc.toObject(User::class.java)?.copy(id = doc.id)
+            }.orEmpty()
+            trySend(users)
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override fun getApprovedUsers(): Flow<List<User>> = callbackFlow {
+        val query = usersCollection.whereEqualTo("status", UserStatus.APPROVED.name)
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 close(error)
@@ -46,6 +65,26 @@ class UserRepositoryImpl(
         runCatching {
             usersCollection.document(userId)
                 .update(updates)
+                .await()
+        }
+
+    override suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit> =
+        runCatching {
+            val dependentData = mapOf(
+                "id" to dependent.id,
+                "name" to dependent.name,
+                "birthDate" to dependent.birthDate,
+                "relationship" to dependent.relationship,
+                "medicalNotes" to dependent.medicalNotes,
+                "enrolledWorkshopIds" to dependent.enrolledWorkshopIds,
+            )
+            usersCollection.document(userId)
+                .update(
+                    mapOf(
+                        "dependents" to FieldValue.arrayUnion(dependentData),
+                        "associatedStudentIds" to FieldValue.arrayUnion(dependent.id),
+                    )
+                )
                 .await()
         }
 

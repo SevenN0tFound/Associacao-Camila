@@ -2,6 +2,7 @@ package com.associacaocamila.app.ui.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.associacaocamila.app.data.model.Dependent
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.data.repository.UserRepository
@@ -11,13 +12,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface AdminApprovalsUiState {
     data object Loading : AdminApprovalsUiState
-    data class Success(val pendingUsers: List<User>) : AdminApprovalsUiState
+    data class Success(
+        val pendingUsers: List<User>,
+        val approvedUsers: List<User> = emptyList(),
+    ) : AdminApprovalsUiState
     data class Error(val message: String) : AdminApprovalsUiState
 }
 
@@ -28,24 +32,35 @@ class AdminApprovalsViewModel(
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
+    private val _feedbackMessage = MutableStateFlow<String?>(null)
+    val feedbackMessage: StateFlow<String?> = _feedbackMessage.asStateFlow()
+
     private val _processingUserIds = MutableStateFlow<Set<String>>(emptySet())
     val processingUserIds: StateFlow<Set<String>> = _processingUserIds.asStateFlow()
 
-    val uiState: StateFlow<AdminApprovalsUiState> = repository.getPendingUsers()
-        .map<List<User>, AdminApprovalsUiState> { users ->
-            AdminApprovalsUiState.Success(users)
-        }
+    private val _isAddingDependent = MutableStateFlow(false)
+    val isAddingDependent: StateFlow<Boolean> = _isAddingDependent.asStateFlow()
+
+    val uiState: StateFlow<AdminApprovalsUiState> = combine(
+        repository.getPendingUsers(),
+        repository.getApprovedUsers(),
+    ) { pending, approved ->
+        AdminApprovalsUiState.Success(
+            pendingUsers = pending,
+            approvedUsers = approved,
+        ) as AdminApprovalsUiState
+    }
         .catch { throwable ->
             emit(
                 AdminApprovalsUiState.Error(
-                    throwable.localizedMessage ?: "Ocorreu um erro ao carregar os cadastros pendentes."
+                    throwable.localizedMessage ?: "Ocorreu um erro ao carregar os cadastros."
                 )
             )
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = AdminApprovalsUiState.Loading
+            initialValue = AdminApprovalsUiState.Loading,
         )
 
     fun approveUser(userId: String) {
@@ -61,6 +76,13 @@ class AdminApprovalsViewModel(
             _processingUserIds.value += userId
             _actionError.value = null
             repository.updateUserStatus(userId, newStatus)
+                .onSuccess {
+                    if (newStatus == UserStatus.APPROVED) {
+                        _feedbackMessage.value = "Usuário aprovado com sucesso!"
+                    } else if (newStatus == UserStatus.REJECTED) {
+                        _feedbackMessage.value = "Cadastro recusado."
+                    }
+                }
                 .onFailure { error ->
                     _actionError.value = error.localizedMessage
                         ?: "Não foi possível atualizar o status do usuário. Tente novamente."
@@ -69,7 +91,46 @@ class AdminApprovalsViewModel(
         }
     }
 
+    fun addDependent(
+        userId: String,
+        name: String,
+        birthDate: String,
+        relationship: String,
+        medicalNotes: String,
+        onSuccess: () -> Unit = {},
+    ) {
+        if (name.isBlank()) {
+            _actionError.value = "Por favor, informe o nome completo do dependente."
+            return
+        }
+
+        viewModelScope.launch {
+            _isAddingDependent.value = true
+            _actionError.value = null
+            val dependent = Dependent(
+                name = name.trim(),
+                birthDate = birthDate.trim(),
+                relationship = relationship.trim().ifBlank { "Filho(a)" },
+                medicalNotes = medicalNotes.trim(),
+            )
+            repository.addDependentToUser(userId, dependent)
+                .onSuccess {
+                    _feedbackMessage.value = "Dependente ${dependent.name} vinculado com sucesso!"
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _actionError.value = error.localizedMessage
+                        ?: "Não foi possível vincular o dependente. Tente novamente."
+                }
+            _isAddingDependent.value = false
+        }
+    }
+
     fun clearActionError() {
         _actionError.value = null
+    }
+
+    fun clearFeedbackMessage() {
+        _feedbackMessage.value = null
     }
 }

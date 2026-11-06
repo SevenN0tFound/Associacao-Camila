@@ -1,8 +1,11 @@
 package com.associacaocamila.app.ui.admin
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,43 +21,73 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.associacaocamila.app.data.model.Dependent
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
+import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaGray
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
@@ -67,15 +100,30 @@ fun AdminApprovalsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val actionError by viewModel.actionError.collectAsState()
+    val feedbackMessage by viewModel.feedbackMessage.collectAsState()
     val processingUserIds by viewModel.processingUserIds.collectAsState()
+    val isAddingDependent by viewModel.isAddingDependent.collectAsState()
 
     AdminApprovalsContent(
         uiState = uiState,
         actionError = actionError,
+        feedbackMessage = feedbackMessage,
         processingUserIds = processingUserIds,
+        isAddingDependent = isAddingDependent,
         onApprove = { viewModel.approveUser(it) },
         onReject = { viewModel.rejectUser(it) },
+        onAddDependent = { userId, name, birthDate, relationship, medicalNotes, onSuccess ->
+            viewModel.addDependent(
+                userId = userId,
+                name = name,
+                birthDate = birthDate,
+                relationship = relationship,
+                medicalNotes = medicalNotes,
+                onSuccess = onSuccess,
+            )
+        },
         onDismissError = { viewModel.clearActionError() },
+        onDismissFeedback = { viewModel.clearFeedbackMessage() },
         modifier = modifier,
     )
 }
@@ -84,49 +132,71 @@ fun AdminApprovalsScreen(
 fun AdminApprovalsContent(
     uiState: AdminApprovalsUiState,
     actionError: String?,
-    processingUserIds: Set<String>,
-    onApprove: (String) -> Unit,
-    onReject: (String) -> Unit,
-    onDismissError: () -> Unit,
+    feedbackMessage: String? = null,
+    processingUserIds: Set<String> = emptySet(),
+    isAddingDependent: Boolean = false,
+    onApprove: (String) -> Unit = {},
+    onReject: (String) -> Unit = {},
+    onAddDependent: (
+        userId: String,
+        name: String,
+        birthDate: String,
+        relationship: String,
+        medicalNotes: String,
+        onSuccess: () -> Unit,
+    ) -> Unit = { _, _, _, _, _, _ -> },
+    onDismissError: () -> Unit = {},
+    onDismissFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    var targetUserForDependent by remember { mutableStateOf<User?>(null) }
+
+    LaunchedEffect(feedbackMessage) {
+        feedbackMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            onDismissFeedback()
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(BackgroundLight),
     ) {
         // Alerta em caso de erro na operação
         AnimatedVisibility(
             visible = actionError != null,
             enter = fadeIn(),
-            exit = fadeOut()
+            exit = fadeOut(),
         ) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = actionError.orEmpty(),
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = onDismissError) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Fechar erro",
-                            tint = MaterialTheme.colorScheme.error
+                            tint = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
@@ -137,11 +207,11 @@ fun AdminApprovalsContent(
             is AdminApprovalsUiState.Loading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(
                         color = CamilaGreen,
-                        strokeWidth = 3.dp
+                        strokeWidth = 3.dp,
                     )
                 }
             }
@@ -149,44 +219,391 @@ fun AdminApprovalsContent(
             is AdminApprovalsUiState.Error -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
+                        modifier = Modifier.padding(24.dp),
                     ) {
                         Text(
                             text = uiState.message,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
             }
 
             is AdminApprovalsUiState.Success -> {
-                if (uiState.pendingUsers.isEmpty()) {
-                    EmptyApprovalsState()
+                // Abas de navegação: Pendentes e Aprovados
+                PrimaryTabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = Color.White,
+                    contentColor = CamilaGreenDark,
+                ) {
+                    Tab(
+                        selected = selectedTabIndex == 0,
+                        onClick = { selectedTabIndex = 0 },
+                        text = {
+                            Text(
+                                text = "Pendentes (${uiState.pendingUsers.size})",
+                                fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        },
+                    )
+                    Tab(
+                        selected = selectedTabIndex == 1,
+                        onClick = { selectedTabIndex = 1 },
+                        text = {
+                            Text(
+                                text = "Aprovados (${uiState.approvedUsers.size})",
+                                fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        },
+                    )
+                }
+
+                val currentList = if (selectedTabIndex == 0) {
+                    uiState.pendingUsers
+                } else {
+                    uiState.approvedUsers
+                }
+
+                if (currentList.isEmpty()) {
+                    EmptyApprovalsState(
+                        isPendingTab = selectedTabIndex == 0,
+                    )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         item {
-                            ApprovalsHeader(totalPending = uiState.pendingUsers.size)
+                            if (selectedTabIndex == 0) {
+                                ApprovalsHeader(totalCount = uiState.pendingUsers.size, isPending = true)
+                            } else {
+                                ApprovalsHeader(totalCount = uiState.approvedUsers.size, isPending = false)
+                            }
                         }
 
                         items(
-                            items = uiState.pendingUsers,
-                            key = { it.id }
+                            items = currentList,
+                            key = { it.id },
                         ) { user ->
-                            PendingUserCard(
+                            AdminUserCard(
                                 user = user,
+                                isPending = selectedTabIndex == 0,
                                 isProcessing = processingUserIds.contains(user.id),
                                 onApprove = { onApprove(user.id) },
-                                onReject = { onReject(user.id) }
+                                onReject = { onReject(user.id) },
+                                onOpenAddDependent = { targetUserForDependent = user },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal Bottom Sheet para Cadastrar e Vincular Dependente ao Responsável
+    targetUserForDependent?.let { responsibleUser ->
+        AddDependentBottomSheet(
+            responsible = responsibleUser,
+            isLoading = isAddingDependent,
+            onDismiss = { targetUserForDependent = null },
+            onSave = { name, birthDate, relationship, medicalNotes ->
+                onAddDependent(
+                    responsibleUser.id,
+                    name,
+                    birthDate,
+                    relationship,
+                    medicalNotes,
+                ) {
+                    targetUserForDependent = null
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ApprovalsHeader(
+    totalCount: Int,
+    isPending: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPending) CamilaOrange.copy(alpha = 0.12f) else CamilaGreen.copy(alpha = 0.12f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (isPending) Icons.Default.VerifiedUser else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = if (isPending) CamilaOrange else CamilaGreenDark,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = if (isPending) "Validação Institucional" else "Cadastros Aprovados",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                )
+                Text(
+                    text = if (isPending) {
+                        "$totalCount cadastro(s) aguardando liberação de acesso."
+                    } else {
+                        "$totalCount membro(s) ativos e integrados à Associação Camila."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CamilaGray,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminUserCard(
+    user: User,
+    isPending: Boolean,
+    isProcessing: Boolean,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+    onOpenAddDependent: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(CamilaGreen.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = CamilaGreen,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = user.name.ifBlank { "Sem nome" },
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            tint = CamilaGray,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = user.email.ifBlank { "Sem e-mail" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CamilaGray,
+                        )
+                    }
+                }
+
+                if (!isPending) {
+                    Surface(
+                        color = CamilaGreen.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = "Aprovado",
+                            color = CamilaGreenDark,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Badge com o perfil solicitado ou aprovado
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RoleBadge(role = user.role, isPending = isPending)
+
+                // Contador de dependentes se for RESPONSAVEL
+                if (user.role == UserRole.RESPONSAVEL) {
+                    Surface(
+                        color = CamilaOrange.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FamilyRestroom,
+                                contentDescription = null,
+                                tint = CamilaOrange,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (user.dependents.isEmpty()) {
+                                    "0 dependentes"
+                                } else {
+                                    "${user.dependents.size} dependente(s)"
+                                },
+                                color = CamilaOrange,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Seção Especial de Gestão de Dependentes para perfis RESPONSAVEL
+            if (user.role == UserRole.RESPONSAVEL) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CamilaGray.copy(alpha = 0.15f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Botão secundário "Vincular Dependente"
+                OutlinedButton(
+                    onClick = onOpenAddDependent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, CamilaGreen),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = CamilaGreenDark,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = CamilaGreenDark,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Vincular Dependente",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark,
+                    )
+                }
+
+                // Lista de Dependentes já vinculados ao responsável
+                if (user.dependents.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Dependentes Vinculados:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        user.dependents.forEach { dependent ->
+                            DependentItemCard(dependent = dependent)
+                        }
+                    }
+                }
+            }
+
+            // Botões de Ação para usuários pendentes
+            if (isPending) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onReject,
+                        enabled = !isProcessing,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Recusar",
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+
+                    Button(
+                        onClick = onApprove,
+                        enabled = !isProcessing,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CamilaGreen,
+                            disabledContainerColor = CamilaGreen.copy(alpha = 0.5f),
+                        ),
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color.White,
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Aprovar",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
                             )
                         }
                     }
@@ -197,169 +614,99 @@ fun AdminApprovalsContent(
 }
 
 @Composable
-private fun ApprovalsHeader(totalPending: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = CamilaOrange.copy(alpha = 0.12f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.VerifiedUser,
-                contentDescription = null,
-                tint = CamilaOrange,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = "Validação Institucional",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = CamilaGreenDark
-                )
-                Text(
-                    text = "$totalPending cadastro(s) aguardando liberação de acesso.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CamilaGray
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PendingUserCard(
-    user: User,
-    isProcessing: Boolean,
-    onApprove: () -> Unit,
-    onReject: () -> Unit,
+private fun DependentItemCard(
+    dependent: Dependent,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(10.dp),
+        color = BackgroundLight,
+        border = BorderStroke(1.dp, CamilaGray.copy(alpha = 0.15f)),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(10.dp)) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(CamilaGreen.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = CamilaGreen,
-                        modifier = Modifier.size(24.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(CamilaGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = CamilaGreenDark,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = dependent.name.ifBlank { "Sem nome" },
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
+                Surface(
+                    color = CamilaGreen.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
                     Text(
-                        text = user.name.ifBlank { "Sem nome" },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = dependent.relationship.ifBlank { "Dependente" },
+                        color = CamilaGreenDark,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = null,
-                            tint = CamilaGray,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = user.email.ifBlank { "Sem e-mail" },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = CamilaGray
-                        )
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (dependent.birthDate.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = CamilaGray,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Nascimento: ${dependent.birthDate}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CamilaGray,
+                    )
+                }
+            }
 
-            // Badge com o perfil solicitado
-            RoleBadge(role = user.role)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Botões de Ação
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onReject,
-                    enabled = !isProcessing,
+            if (dependent.medicalNotes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(CamilaOrange.copy(alpha = 0.1f))
+                        .padding(6.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        imageVector = Icons.Default.HealthAndSafety,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        tint = CamilaOrange,
+                        modifier = Modifier.size(14.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Recusar",
-                        fontWeight = FontWeight.Bold
+                        text = dependent.medicalNotes,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 16.sp,
                     )
-                }
-
-                Button(
-                    onClick = onApprove,
-                    enabled = !isProcessing,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CamilaGreen,
-                        disabledContainerColor = CamilaGreen.copy(alpha = 0.5f)
-                    )
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Aprovar",
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
                 }
             }
         }
@@ -367,7 +714,7 @@ private fun PendingUserCard(
 }
 
 @Composable
-private fun RoleBadge(role: UserRole) {
+private fun RoleBadge(role: UserRole, isPending: Boolean) {
     val roleLabel = when (role) {
         UserRole.ADMIN -> "Administrador"
         UserRole.PROFESSOR -> "Professor"
@@ -376,60 +723,305 @@ private fun RoleBadge(role: UserRole) {
     }
 
     Surface(
-        color = CamilaOrange.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(8.dp)
+        color = if (isPending) CamilaOrange.copy(alpha = 0.12f) else CamilaGreen.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(8.dp),
     ) {
         Text(
-            text = "Solicitado: $roleLabel",
-            color = CamilaOrange,
+            text = if (isPending) "Solicitado: $roleLabel" else "Perfil: $roleLabel",
+            color = if (isPending) CamilaOrange else CamilaGreenDark,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EmptyApprovalsState() {
+private fun AddDependentBottomSheet(
+    responsible: User,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, birthDate: String, relationship: String, medicalNotes: String) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var birthDate by rememberSaveable { mutableStateOf("") }
+    var relationship by rememberSaveable { mutableStateOf("Filho(a)") }
+    var relationshipDropdownExpanded by remember { mutableStateOf(false) }
+    var medicalNotes by rememberSaveable { mutableStateOf("") }
+
+    val relationshipOptions = listOf("Filho(a)", "Pai/Mãe", "Irmão(a)", "Neto(a)", "Outro")
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            if (!isLoading) onDismiss()
+        },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = "Vincular Dependente",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark,
+                    )
+                    Text(
+                        text = "Responsável: ${responsible.name.ifBlank { "Sem nome" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CamilaGray,
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        if (!isLoading) onDismiss()
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Fechar formulário",
+                        tint = CamilaGray,
+                    )
+                }
+            }
+
+            HorizontalDivider(color = CamilaGray.copy(alpha = 0.15f))
+
+            // Campo Nome Completo
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nome Completo da Criança ou Idoso") },
+                placeholder = { Text("Ex: Lucas Silva") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = CamilaOrange,
+                    )
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = CamilaGreen,
+                    focusedLabelColor = CamilaGreenDark,
+                ),
+                enabled = !isLoading,
+            )
+
+            // Campo Data de Nascimento
+            OutlinedTextField(
+                value = birthDate,
+                onValueChange = { birthDate = it },
+                label = { Text("Data de Nascimento") },
+                placeholder = { Text("DD/MM/AAAA") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = CamilaOrange,
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = CamilaGreen,
+                    focusedLabelColor = CamilaGreenDark,
+                ),
+                enabled = !isLoading,
+            )
+
+            // Dropdown Grau de Parentesco
+            ExposedDropdownMenuBox(
+                expanded = relationshipDropdownExpanded,
+                onExpandedChange = {
+                    if (!isLoading) {
+                        relationshipDropdownExpanded = !relationshipDropdownExpanded
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedTextField(
+                    value = relationship,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Grau de Parentesco") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = relationshipDropdownExpanded)
+                    },
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CamilaGreen,
+                        focusedLabelColor = CamilaGreenDark,
+                    ),
+                    enabled = !isLoading,
+                )
+
+                ExposedDropdownMenu(
+                    expanded = relationshipDropdownExpanded,
+                    onDismissRequest = { relationshipDropdownExpanded = false },
+                ) {
+                    relationshipOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = option,
+                                    fontWeight = if (option == relationship) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (option == relationship) CamilaGreenDark else MaterialTheme.colorScheme.onSurface,
+                                )
+                            },
+                            onClick = {
+                                relationship = option
+                                relationshipDropdownExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Campo Observações de Saúde / Cuidados Especiais
+            OutlinedTextField(
+                value = medicalNotes,
+                onValueChange = { medicalNotes = it },
+                label = { Text("Observações de Saúde / Cuidados Especiais") },
+                placeholder = { Text("Alergias, remédios contínuos, cuidados específicos ou recomendações da ONG") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.HealthAndSafety,
+                        contentDescription = null,
+                        tint = CamilaOrange,
+                    )
+                },
+                minLines = 3,
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = CamilaGreen,
+                    focusedLabelColor = CamilaGreenDark,
+                ),
+                enabled = !isLoading,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Botões de Ação
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = CamilaGray,
+                    ),
+                    enabled = !isLoading,
+                ) {
+                    Text(
+                        text = "Cancelar",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        onSave(name, birthDate, relationship, medicalNotes)
+                    },
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
+                    enabled = !isLoading && name.isNotBlank(),
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text = "Salvar e Vincular",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyApprovalsState(isPendingTab: Boolean) {
     Box(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp)
+            modifier = Modifier.padding(32.dp),
         ) {
             Box(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
                     .background(CamilaGreen.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.HourglassEmpty,
+                    imageVector = if (isPendingTab) Icons.Default.HourglassEmpty else Icons.Default.CheckCircle,
                     contentDescription = null,
                     tint = CamilaGreen,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp),
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Tudo em dia!",
+                text = if (isPendingTab) "Tudo em dia!" else "Nenhum usuário aprovado",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = CamilaGreenDark,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Nenhum cadastro pendente de aprovação no momento.",
+                text = if (isPendingTab) {
+                    "Nenhum cadastro pendente de aprovação no momento."
+                } else {
+                    "Nenhum cadastro ativo encontrado nesta listagem."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = CamilaGray,
                 textAlign = TextAlign.Center,
-                lineHeight = 20.sp
+                lineHeight = 20.sp,
             )
         }
     }
@@ -441,28 +1033,46 @@ private fun AdminApprovalsScreenPreview() {
     AssociacaoCamilaTheme {
         AdminApprovalsContent(
             uiState = AdminApprovalsUiState.Success(
-                listOf(
+                pendingUsers = listOf(
                     User(
                         id = "1",
-                        name = "Carlos Souza",
-                        email = "carlos.souza@email.com",
-                        role = UserRole.PROFESSOR,
-                        status = UserStatus.PENDING
+                        name = "Mariana Alves",
+                        email = "mariana.alves@email.com",
+                        role = UserRole.RESPONSAVEL,
+                        status = UserStatus.PENDING,
+                        dependents = listOf(
+                            Dependent(
+                                id = "d1",
+                                name = "Enzo Gabriel Alves",
+                                birthDate = "10/04/2015",
+                                relationship = "Filho(a)",
+                                medicalNotes = "Alergia a lactose",
+                            ),
+                        ),
                     ),
                     User(
                         id = "2",
-                        name = "Ana Beatriz",
-                        email = "ana.beatriz@email.com",
-                        role = UserRole.ALUNO,
-                        status = UserStatus.PENDING
-                    )
-                )
+                        name = "Carlos Souza",
+                        email = "carlos.souza@email.com",
+                        role = UserRole.PROFESSOR,
+                        status = UserStatus.PENDING,
+                    ),
+                ),
+                approvedUsers = listOf(
+                    User(
+                        id = "3",
+                        name = "Juliana Lima",
+                        email = "juliana@email.com",
+                        role = UserRole.RESPONSAVEL,
+                        status = UserStatus.APPROVED,
+                    ),
+                ),
             ),
             actionError = null,
             processingUserIds = emptySet(),
             onApprove = {},
             onReject = {},
-            onDismissError = {}
+            onDismissError = {},
         )
     }
 }
@@ -477,7 +1087,7 @@ private fun AdminApprovalsScreenEmptyPreview() {
             processingUserIds = emptySet(),
             onApprove = {},
             onReject = {},
-            onDismissError = {}
+            onDismissError = {},
         )
     }
 }
