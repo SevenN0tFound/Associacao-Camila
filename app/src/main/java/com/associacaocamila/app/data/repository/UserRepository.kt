@@ -11,6 +11,7 @@ import kotlinx.coroutines.tasks.await
 interface UserRepository {
     fun getPendingUsers(): Flow<List<User>>
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
+    suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
 }
 
 class UserRepositoryImpl(
@@ -38,6 +39,13 @@ class UserRepositoryImpl(
         runCatching {
             usersCollection.document(userId)
                 .update("status", newStatus.name)
+                .await()
+        }
+
+    override suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit> =
+        runCatching {
+            usersCollection.document(userId)
+                .update(updates)
                 .await()
         }
 

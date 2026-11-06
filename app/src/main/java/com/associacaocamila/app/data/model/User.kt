@@ -8,7 +8,11 @@ data class User(
     val status: UserStatus = UserStatus.PENDING, // Todo cadastro entra como pendente até aprovação da ONG
     val associatedStudentIds: List<String> = emptyList(), // Para contas de responsáveis
     val registeredProjects: List<String> = emptyList(),   // Projetos: Fortalecimento, Mídias Force, etc.
-    val createdAt: Long = System.currentTimeMillis()
+    val phone: String = "",
+    val birthDate: String = "",
+    val address: String = "",
+    val medicalNotes: String = "", // Alergias, remédios contínuos ou observações
+    val createdAt: Long = System.currentTimeMillis(),
 )
 
 enum class UserRole {

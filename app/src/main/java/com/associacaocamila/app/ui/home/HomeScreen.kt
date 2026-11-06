@@ -17,45 +17,64 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import android.widget.Toast
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,17 +86,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
 import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
+import com.associacaocamila.app.ui.profile.ProfileUiState
+import com.associacaocamila.app.ui.profile.ProfileViewModel
 import com.associacaocamila.app.ui.student.StudentAttendanceScreen
 import com.associacaocamila.app.ui.student.StudentWorkshopsScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
@@ -114,11 +139,15 @@ fun HomeScreen(
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
     initialDrawerValue: DrawerValue = DrawerValue.Closed,
+    onUserUpdated: ((User) -> Unit)? = null,
 ) {
-    val navItems = remember(currentUser.role) {
+    var userState by remember(currentUser) { mutableStateOf(currentUser) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val navItems = remember(userState.role) {
         buildList {
             add(NavigationItem.Inicio)
-            when (currentUser.role) {
+            when (userState.role) {
                 UserRole.ALUNO, UserRole.RESPONSAVEL -> {
                     add(NavigationItem.MinhasOficinas)
                     add(NavigationItem.Frequencia)
@@ -133,15 +162,15 @@ fun HomeScreen(
         }
     }
 
-    val targetStudentId = remember(currentUser) {
-        if ((currentUser.role == UserRole.RESPONSAVEL) && currentUser.associatedStudentIds.isNotEmpty()) {
-            currentUser.associatedStudentIds.first()
+    val targetStudentId = remember(userState) {
+        if ((userState.role == UserRole.RESPONSAVEL) && userState.associatedStudentIds.isNotEmpty()) {
+            userState.associatedStudentIds.first()
         } else {
-            currentUser.id
+            userState.id
         }
     }
 
-    var selectedRoute by rememberSaveable(currentUser.role) {
+    var selectedRoute by rememberSaveable(userState.role) {
         mutableStateOf(NavigationItem.Inicio.route)
     }
 
@@ -194,14 +223,14 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = currentUser.name.ifBlank { "Utilizador" },
+                                            text = userState.name.ifBlank { "Utilizador" },
                                             style = MaterialTheme.typography.titleMedium.copy(
                                                 fontWeight = FontWeight.Bold
                                             ),
                                             color = Color.White
                                         )
                                         Text(
-                                            text = currentUser.email.ifBlank { "Sem e-mail" },
+                                            text = userState.email.ifBlank { "Sem e-mail" },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.White.copy(alpha = 0.85f)
                                         )
@@ -215,7 +244,7 @@ fun HomeScreen(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = currentUser.role.toDisplayName(),
+                                        text = userState.role.toDisplayName(),
                                         color = Color.White,
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.Bold
@@ -311,6 +340,7 @@ fun HomeScreen(
         Scaffold(
             modifier = modifier.fillMaxSize(),
             containerColor = BackgroundLight,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
@@ -353,15 +383,20 @@ fun HomeScreen(
                 label = "home_tab_animation"
             ) { navItem ->
                 when (navItem) {
-                    is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
+                    is NavigationItem.Inicio -> InicioTabContent(currentUser = userState)
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(studentId = targetStudentId)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(studentId = targetStudentId)
-                    is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
+                    is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
                     is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()
                     is NavigationItem.Perfil -> PerfilTabContent(
-                        currentUser = currentUser,
-                        onLogout = onLogout
+                        currentUser = userState,
+                        onUserUpdated = { updated ->
+                            userState = updated
+                            onUserUpdated?.invoke(updated)
+                        },
+                        onLogout = onLogout,
+                        snackbarHostState = snackbarHostState,
                     )
                 }
             }
@@ -536,63 +571,139 @@ private fun NoticeCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PerfilTabContent(
     currentUser: User,
+    onUserUpdated: (User) -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState? = null,
+    profileViewModel: ProfileViewModel? = null,
 ) {
+    val isInspectionMode = LocalInspectionMode.current
+    val actualViewModel = if (isInspectionMode) null else (profileViewModel ?: viewModel())
+    val uiState = actualViewModel?.uiState?.collectAsState()?.value ?: ProfileUiState()
+    val context = LocalContext.current
+    var showEditSheet by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
+        uiState.successMessage?.let { msg ->
+            if (snackbarHostState != null) {
+                snackbarHostState.showSnackbar(msg)
+            } else {
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+            actualViewModel?.clearMessages()
+        }
+        uiState.errorMessage?.let { err ->
+            if (snackbarHostState != null) {
+                snackbarHostState.showSnackbar(err)
+            } else {
+                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+            }
+            actualViewModel?.clearMessages()
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Avatar Institucional
         Box(
             modifier = Modifier
                 .size(90.dp)
                 .clip(CircleShape)
                 .background(CamilaGreen.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Default.Person,
                 contentDescription = null,
                 tint = CamilaGreen,
-                modifier = Modifier.size(52.dp)
+                modifier = Modifier.size(52.dp),
             )
         }
 
-        Text(
-            text = currentUser.name.ifBlank { "Utilizador" },
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            color = CamilaGreenDark,
-            textAlign = TextAlign.Center
-        )
+        // Nome e perfil
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = currentUser.name.ifBlank { "Utilizador" },
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = CamilaGreenDark,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                color = CamilaGreen.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    text = currentUser.role.toDisplayName(),
+                    color = CamilaGreenDark,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
 
+        // Botão "Editar Perfil"
+        Button(
+            onClick = { showEditSheet = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Editar Perfil",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Color.White,
+            )
+        }
+
+        // Card 1: Dados da Conta
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                Text(
+                    text = "Dados da Conta",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                )
                 ProfileInfoRow(
                     icon = Icons.Default.Email,
                     label = "E-mail",
-                    value = currentUser.email.ifBlank { "Não informado" }
+                    value = currentUser.email.ifBlank { "Não informado" },
                 )
                 ProfileInfoRow(
                     icon = Icons.Default.Badge,
                     label = "Tipo de Conta",
-                    value = currentUser.role.toDisplayName()
+                    value = currentUser.role.toDisplayName(),
                 )
                 ProfileInfoRow(
                     icon = Icons.Default.School,
@@ -601,13 +712,132 @@ private fun PerfilTabContent(
                         UserStatus.APPROVED -> "Aprovado"
                         UserStatus.PENDING -> "Pendente de Análise"
                         UserStatus.REJECTED -> "Recusado"
-                    }
+                    },
                 )
+            }
+        }
+
+        // Card 2: Contato e Endereço
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = "Contato e Localização",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                )
+                ProfileInfoRow(
+                    icon = Icons.Default.Phone,
+                    label = "Telefone / WhatsApp",
+                    value = currentUser.phone.ifBlank { "Não informado" },
+                    iconTint = CamilaOrange,
+                )
+                ProfileInfoRow(
+                    icon = Icons.Default.CalendarToday,
+                    label = "Data de Nascimento",
+                    value = currentUser.birthDate.ifBlank { "Não informada" },
+                    iconTint = CamilaOrange,
+                )
+                ProfileInfoRow(
+                    icon = Icons.Default.LocationOn,
+                    label = "Endereço Residencial",
+                    value = currentUser.address.ifBlank { "Não informado" },
+                    iconTint = CamilaOrange,
+                )
+            }
+        }
+
+        // Card 3: Prontuário & Observações Médicas
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(CamilaOrange.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HealthAndSafety,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Prontuário & Observações de Saúde",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark,
+                        )
+                        Text(
+                            text = "Alergias, remédios contínuos ou observações da ONG",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CamilaGray,
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (currentUser.medicalNotes.isNotBlank()) {
+                                CamilaOrange.copy(alpha = 0.08f)
+                            } else {
+                                BackgroundLight
+                            }
+                        )
+                        .padding(12.dp),
+                ) {
+                    if (currentUser.medicalNotes.isNotBlank()) {
+                        Text(
+                            text = currentUser.medicalNotes,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 20.sp,
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = CamilaGray,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Nenhuma restrição ou observação médica cadastrada.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = CamilaGray,
+                            )
+                        }
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Botão Sair da Conta
         Button(
             onClick = onLogout,
             modifier = Modifier
@@ -615,22 +845,252 @@ private fun PerfilTabContent(
                 .height(52.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = CamilaOrange
-            )
+                containerColor = CamilaOrange,
+            ),
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                 contentDescription = null,
-                tint = Color.White
+                tint = Color.White,
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Sair da Conta",
                 style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 ),
-                color = Color.White
+                color = Color.White,
             )
+        }
+    }
+
+    // Modal Bottom Sheet de Edição de Perfil
+    if (showEditSheet) {
+        var editPhone by rememberSaveable { mutableStateOf(currentUser.phone) }
+        var editBirthDate by rememberSaveable { mutableStateOf(currentUser.birthDate) }
+        var editAddress by rememberSaveable { mutableStateOf(currentUser.address) }
+        var editMedicalNotes by rememberSaveable { mutableStateOf(currentUser.medicalNotes) }
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                if (!uiState.isSaving) {
+                    showEditSheet = false
+                    actualViewModel?.clearMessages()
+                }
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = "Editar Perfil",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark,
+                        )
+                        Text(
+                            text = "Atualize suas informações e prontuário",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CamilaGray,
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (!uiState.isSaving) {
+                                showEditSheet = false
+                                actualViewModel?.clearMessages()
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Fechar",
+                            tint = CamilaGray,
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = CamilaGray.copy(alpha = 0.2f))
+
+                OutlinedTextField(
+                    value = editPhone,
+                    onValueChange = { editPhone = it },
+                    label = { Text("Telefone / WhatsApp") },
+                    placeholder = { Text("(11) 98765-4321") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Phone,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CamilaGreen,
+                        focusedLabelColor = CamilaGreenDark,
+                    ),
+                    enabled = !uiState.isSaving,
+                )
+
+                OutlinedTextField(
+                    value = editBirthDate,
+                    onValueChange = { editBirthDate = it },
+                    label = { Text("Data de Nascimento") },
+                    placeholder = { Text("DD/MM/AAAA") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CamilaGreen,
+                        focusedLabelColor = CamilaGreenDark,
+                    ),
+                    enabled = !uiState.isSaving,
+                )
+
+                OutlinedTextField(
+                    value = editAddress,
+                    onValueChange = { editAddress = it },
+                    label = { Text("Endereço Residencial") },
+                    placeholder = { Text("Rua, número, bairro e cidade") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CamilaGreen,
+                        focusedLabelColor = CamilaGreenDark,
+                    ),
+                    enabled = !uiState.isSaving,
+                )
+
+                OutlinedTextField(
+                    value = editMedicalNotes,
+                    onValueChange = { editMedicalNotes = it },
+                    label = { Text("Prontuário & Observações de Saúde") },
+                    placeholder = { Text("Alergias, remédios contínuos, cuidados específicos ou recomendações") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.HealthAndSafety,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                        )
+                    },
+                    minLines = 3,
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CamilaGreen,
+                        focusedLabelColor = CamilaGreenDark,
+                    ),
+                    enabled = !uiState.isSaving,
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            showEditSheet = false
+                            actualViewModel?.clearMessages()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = CamilaGray,
+                        ),
+                        enabled = !uiState.isSaving,
+                    ) {
+                        Text(
+                            text = "Cancelar",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (actualViewModel != null) {
+                                actualViewModel.updateProfile(
+                                    currentUser = currentUser,
+                                    phone = editPhone,
+                                    birthDate = editBirthDate,
+                                    address = editAddress,
+                                    medicalNotes = editMedicalNotes,
+                                    onSuccess = { updatedUser ->
+                                        onUserUpdated(updatedUser)
+                                        showEditSheet = false
+                                    },
+                                )
+                            } else {
+                                onUserUpdated(
+                                    currentUser.copy(
+                                        phone = editPhone.trim(),
+                                        birthDate = editBirthDate.trim(),
+                                        address = editAddress.trim(),
+                                        medicalNotes = editMedicalNotes.trim(),
+                                    ),
+                                )
+                                showEditSheet = false
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
+                        enabled = !uiState.isSaving,
+                    ) {
+                        if (uiState.isSaving) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text(
+                                text = "Salvar Alterações",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -640,38 +1100,40 @@ private fun ProfileInfoRow(
     icon: ImageVector,
     label: String,
     value: String,
+    modifier: Modifier = Modifier,
+    iconTint: Color = CamilaGreen,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .clip(CircleShape)
-                .background(CamilaGreen.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
+                .background(iconTint.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = CamilaGreen,
-                modifier = Modifier.size(20.dp)
+                tint = iconTint,
+                modifier = Modifier.size(20.dp),
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = CamilaGray
+                style = MaterialTheme.typography.labelSmall,
+                color = CamilaGray,
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium,
                 ),
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
@@ -694,9 +1156,13 @@ private fun HomeScreenAdminPreview() {
                 name = "Maria Coordenadora",
                 email = "maria@associacaocamila.org",
                 role = UserRole.ADMIN,
-                status = UserStatus.APPROVED
+                status = UserStatus.APPROVED,
+                phone = "(11) 99887-1122",
+                birthDate = "12/03/1985",
+                address = "Av. Social da Paz, 100",
+                medicalNotes = "Sem restrições de saúde.",
             ),
-            onLogout = {}
+            onLogout = {},
         )
     }
 }
@@ -711,9 +1177,13 @@ private fun HomeScreenStudentPreview() {
                 name = "Lucas Silva",
                 email = "lucas@email.com",
                 role = UserRole.ALUNO,
-                status = UserStatus.APPROVED
+                status = UserStatus.APPROVED,
+                phone = "(11) 98765-4321",
+                birthDate = "15/05/2008",
+                address = "Rua das Flores, 120 - Jd. Esperança",
+                medicalNotes = "Alergia leve a amendoim. Sem restrições para atividades esportivas.",
             ),
-            onLogout = {}
+            onLogout = {},
         )
     }
 }
@@ -728,10 +1198,13 @@ private fun HomeScreenDrawerPreview() {
                 name = "Maria Coordenadora",
                 email = "maria@associacaocamila.org",
                 role = UserRole.ADMIN,
-                status = UserStatus.APPROVED
+                status = UserStatus.APPROVED,
+                phone = "(11) 99887-1122",
+                birthDate = "12/03/1985",
+                address = "Av. Social da Paz, 100",
             ),
             onLogout = {},
-            initialDrawerValue = DrawerValue.Open
+            initialDrawerValue = DrawerValue.Open,
         )
     }
 }
@@ -746,10 +1219,41 @@ private fun HomeScreenStudentDrawerPreview() {
                 name = "Lucas Aluno",
                 email = "lucas@associacaocamila.org",
                 role = UserRole.ALUNO,
-                status = UserStatus.APPROVED
+                status = UserStatus.APPROVED,
+                phone = "(11) 98765-4321",
+                birthDate = "15/05/2008",
+                address = "Rua das Flores, 120",
             ),
             onLogout = {},
-            initialDrawerValue = DrawerValue.Open
+            initialDrawerValue = DrawerValue.Open,
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PerfilTabContentPreview() {
+    AssociacaoCamilaTheme {
+        Box(
+            modifier = Modifier
+                .background(BackgroundLight)
+                .fillMaxSize(),
+        ) {
+            PerfilTabContent(
+                currentUser = User(
+                    id = "2",
+                    name = "Lucas Silva",
+                    email = "lucas@email.com",
+                    role = UserRole.ALUNO,
+                    status = UserStatus.APPROVED,
+                    phone = "(11) 98765-4321",
+                    birthDate = "15/05/2008",
+                    address = "Rua das Flores, 120 - Jd. Esperança",
+                    medicalNotes = "Alergia leve a amendoim. Sem restrições para esportes.",
+                ),
+                onUserUpdated = {},
+                onLogout = {},
+            )
+        }
     }
 }

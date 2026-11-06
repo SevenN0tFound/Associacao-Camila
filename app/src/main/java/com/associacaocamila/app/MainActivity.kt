@@ -40,6 +40,9 @@ class MainActivity : ComponentActivity() {
                     } else {
                         HomeScreen(
                             currentUser = loggedUser!!,
+                            onUserUpdated = { updated ->
+                                loggedUser = updated
+                            },
                             onLogout = {
                                 authViewModel.signOut()
                                 loggedUser = null
