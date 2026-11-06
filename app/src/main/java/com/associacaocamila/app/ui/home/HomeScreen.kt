@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
@@ -38,19 +40,26 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,9 +85,10 @@ import com.associacaocamila.app.ui.theme.CamilaGray
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
+import kotlinx.coroutines.launch
 
 /**
- * Representa os itens de navegação da barra inferior com controle
+ * Representa os itens de navegação do menu lateral com controle
  * dinâmico de visibilidade por perfil institucional.
  */
 sealed class NavigationItem(
@@ -100,6 +110,7 @@ fun HomeScreen(
     currentUser: User,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
+    initialDrawerValue: DrawerValue = DrawerValue.Closed,
 ) {
     val navItems = remember(currentUser.role) {
         buildList {
@@ -121,85 +132,223 @@ fun HomeScreen(
     }
 
     val currentItem = navItems.firstOrNull { it.route == selectedRoute } ?: NavigationItem.Inicio
+    val drawerState = rememberDrawerState(initialValue = initialDrawerValue)
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = BackgroundLight,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Associação Camila",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = CamilaGreenDark
-                        )
-                        Text(
-                            text = currentItem.title,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = CamilaGray
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 8.dp
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Color.White,
+                drawerTonalElevation = 0.dp,
+                modifier = Modifier.width(320.dp)
             ) {
-                navItems.forEach { item ->
-                    val isSelected = item.route == currentItem.route
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { selectedRoute = item.route },
+                Column(
+                    modifier = Modifier.fillMaxHeight()
+                ) {
+                    // Área rolável: Cabeçalho institucional e lista de rotas
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // Cabeçalho Institucional Elegante
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(CamilaGreen)
+                                .padding(16.dp)
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                       Icon(
+                                           imageVector = Icons.Default.Person,
+                                           contentDescription = null,
+                                           tint = Color.White,
+                                           modifier = Modifier.size(28.dp)
+                                       )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = currentUser.name.ifBlank { "Utilizador" },
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = currentUser.email.ifBlank { "Sem e-mail" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.85f)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = currentUser.role.toDisplayName(),
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    text = "“Em defesa e valorização da vida”",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = Color.White.copy(alpha = 0.95f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Itens de Navegação Dinâmicos por Perfil
+                        navItems.forEach { item ->
+                            val isSelected = item.route == currentItem.route
+                            NavigationDrawerItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = item.title
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = item.title,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                selected = isSelected,
+                                onClick = {
+                                    selectedRoute = item.route
+                                    scope.launch { drawerState.close() }
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = CamilaGreen.copy(alpha = 0.15f),
+                                    selectedIconColor = CamilaGreenDark,
+                                    selectedTextColor = CamilaGreenDark,
+                                    unselectedIconColor = CamilaGray,
+                                    unselectedTextColor = CamilaGray
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Rodapé Fixo da Gaveta: Divisória e Ação Sair da Conta
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = CamilaGray.copy(alpha = 0.2f)
+                    )
+
+                    NavigationDrawerItem(
                         icon = {
                             Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.title
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Sair da Conta",
+                                tint = CamilaOrange
                             )
                         },
                         label = {
                             Text(
-                                text = item.title,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                text = "Sair da Conta",
+                                color = CamilaOrange,
+                                fontWeight = FontWeight.Bold
                             )
                         },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            selectedTextColor = CamilaGreenDark,
-                            indicatorColor = CamilaGreen,
-                            unselectedIconColor = CamilaGray,
-                            unselectedTextColor = CamilaGray
-                        )
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onLogout()
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
         }
-    ) { innerPadding ->
-        AnimatedContent(
-            targetState = currentItem,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            label = "home_tab_animation"
-        ) { navItem ->
-            when (navItem) {
-                is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
-                is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
-                is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
-                is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
-                is NavigationItem.Turmas -> AdminWorkshopsScreen()
-                is NavigationItem.Perfil -> PerfilTabContent(
-                    currentUser = currentUser,
-                    onLogout = onLogout
+    ) {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            containerColor = BackgroundLight,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Associação Camila",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = CamilaGreenDark
+                            )
+                            Text(
+                                text = currentItem.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = CamilaGray
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Menu de navegação",
+                                tint = CamilaGreenDark
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.White
+                    )
                 )
+            }
+        ) { innerPadding ->
+            AnimatedContent(
+                targetState = currentItem,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                label = "home_tab_animation"
+            ) { navItem ->
+                when (navItem) {
+                    is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
+                    is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
+                    is NavigationItem.Chamada -> AttendanceScreen(teacherId = currentUser.id)
+                    is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
+                    is NavigationItem.Turmas -> AdminWorkshopsScreen()
+                    is NavigationItem.Perfil -> PerfilTabContent(
+                        currentUser = currentUser,
+                        onLogout = onLogout
+                    )
+                }
             }
         }
     }
@@ -208,7 +357,7 @@ fun HomeScreen(
 @Composable
 private fun InicioTabContent(
     currentUser: User,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
@@ -330,7 +479,7 @@ private fun NoticeCard(
     title: String,
     description: String,
     badgeColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -375,7 +524,7 @@ private fun NoticeCard(
 @Composable
 private fun OficinasTabContent(
     currentUser: User,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     PlaceholderCard(
         modifier = modifier,
@@ -395,7 +544,7 @@ private fun OficinasTabContent(
 private fun PerfilTabContent(
     currentUser: User,
     onLogout: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
@@ -494,7 +643,7 @@ private fun PerfilTabContent(
 private fun ProfileInfoRow(
     icon: ImageVector,
     label: String,
-    value: String
+    value: String,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -539,7 +688,7 @@ private fun PlaceholderCard(
     title: String,
     subtitle: String,
     infoText: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
@@ -663,6 +812,24 @@ private fun HomeScreenStudentPreview() {
                 status = UserStatus.APPROVED
             ),
             onLogout = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenDrawerPreview() {
+    AssociacaoCamilaTheme {
+        HomeScreen(
+            currentUser = User(
+                id = "1",
+                name = "Maria Coordenadora",
+                email = "maria@associacaocamila.org",
+                role = UserRole.ADMIN,
+                status = UserStatus.APPROVED
+            ),
+            onLogout = {},
+            initialDrawerValue = DrawerValue.Open
         )
     }
 }
