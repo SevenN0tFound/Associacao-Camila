@@ -30,11 +30,9 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
+import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaBlue
@@ -189,7 +188,7 @@ fun HomeScreen(
                 is NavigationItem.Inicio -> InicioTabContent(currentUser = currentUser)
                 is NavigationItem.Atividades -> OficinasTabContent(currentUser = currentUser)
                 is NavigationItem.Chamada -> ChamadaTabContent(currentUser = currentUser)
-                is NavigationItem.Aprovacoes -> AprovacoesTabContent()
+                is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                 is NavigationItem.Perfil -> PerfilTabContent(
                     currentUser = currentUser,
                     onLogout = onLogout
@@ -398,89 +397,6 @@ private fun ChamadaTabContent(
         subtitle = "Olá, Professor(a) ${currentUser.name}. Aqui poderá gerir as listas de chamada das turmas e registar as presenças das oficinas.",
         infoText = "Módulo para docentes com registo ágil de frequência em fase de disponibilização."
     )
-}
-
-@Composable
-private fun AprovacoesTabContent(
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = CamilaOrange.copy(alpha = 0.12f)
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.HourglassTop,
-                    contentDescription = null,
-                    tint = CamilaOrange,
-                    modifier = Modifier.size(36.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Gestão de Novos Cadastros",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = CamilaGreenDark
-                    )
-                    Text(
-                        text = "Módulo restrito à administração institucional",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CamilaGray
-                    )
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VerifiedUser,
-                    contentDescription = null,
-                    tint = CamilaGreen,
-                    modifier = Modifier.size(48.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Validação Institucional",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Aqui serão listados os novos cadastros com status PENDENTE para validação da direção da Associação Camila, permitindo aprovar ou rejeitar o acesso ao aplicativo.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CamilaGray,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 22.sp
-                )
-            }
-        }
-    }
 }
 
 @Composable
