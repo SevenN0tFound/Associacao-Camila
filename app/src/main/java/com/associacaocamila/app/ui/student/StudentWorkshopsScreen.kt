@@ -2,6 +2,7 @@ package com.associacaocamila.app.ui.student
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +17,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -31,6 +35,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +61,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.associacaocamila.app.data.model.Dependent
+import com.associacaocamila.app.data.model.User
+import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
@@ -64,18 +74,36 @@ import com.associacaocamila.app.ui.theme.CamilaOrange
 
 @Composable
 fun StudentWorkshopsScreen(
-    studentId: String,
+    currentUser: User,
     modifier: Modifier = Modifier,
     viewModel: StudentWorkshopsViewModel = viewModel(),
 ) {
+    val isResponsible = currentUser.role == UserRole.RESPONSAVEL
+    val dependents = currentUser.dependents
+
+    // Se for Responsável e tiver dependentes, controla qual dependente está selecionado
+    var selectedDependentId by rememberSaveable(currentUser.id, dependents.size) {
+        mutableStateOf(dependents.firstOrNull()?.id.orEmpty())
+    }
+
+    // Define qual ID buscar: dependente selecionado ou o ID do próprio aluno
+    val effectiveStudentId = remember(isResponsible, selectedDependentId, currentUser.id) {
+        if (isResponsible) selectedDependentId else currentUser.id
+    }
+
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(studentId) {
-        viewModel.loadWorkshops(studentId)
+    LaunchedEffect(effectiveStudentId) {
+        if (effectiveStudentId.isNotBlank()) {
+            viewModel.loadWorkshops(effectiveStudentId)
+        }
     }
 
     StudentWorkshopsContent(
         uiState = uiState,
+        currentUser = currentUser,
+        selectedDependentId = selectedDependentId,
+        onSelectDependent = { selectedDependentId = it },
         modifier = modifier,
     )
 }
@@ -83,14 +111,35 @@ fun StudentWorkshopsScreen(
 @Composable
 fun StudentWorkshopsContent(
     uiState: StudentWorkshopsUiState,
+    currentUser: User? = null,
+    selectedDependentId: String = "",
+    onSelectDependent: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    val isResponsible = currentUser?.role == UserRole.RESPONSAVEL
+    val dependents = currentUser?.dependents.orEmpty()
+
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(BackgroundLight)
             .padding(16.dp),
     ) {
+        // Se for Responsável, exibe o seletor horizontal de dependentes no topo
+        if (isResponsible) {
+            if (dependents.isEmpty()) {
+                NoDependentsWarningCard()
+                return@Column
+            } else {
+                DependentsSelectorBar(
+                    dependents = dependents,
+                    selectedDependentId = selectedDependentId,
+                    onSelectDependent = onSelectDependent
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+
         if (uiState.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -102,7 +151,10 @@ fun StudentWorkshopsContent(
                 )
             }
         } else if (uiState.workshops.isEmpty()) {
-            EmptyStudentWorkshopsState()
+            EmptyStudentWorkshopsState(
+                isDependent = isResponsible,
+                dependentName = dependents.firstOrNull { it.id == selectedDependentId }?.name
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -110,7 +162,12 @@ fun StudentWorkshopsContent(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {
-                    StudentWorkshopsHeader(total = uiState.workshops.size)
+                    StudentWorkshopsHeader(
+                        total = uiState.workshops.size,
+                        targetName = if (isResponsible) {
+                            dependents.firstOrNull { it.id == selectedDependentId }?.name
+                        } else null
+                    )
                 }
 
                 items(
@@ -125,7 +182,136 @@ fun StudentWorkshopsContent(
 }
 
 @Composable
-private fun StudentWorkshopsHeader(total: Int) {
+private fun DependentsSelectorBar(
+    dependents: List<Dependent>,
+    selectedDependentId: String,
+    onSelectDependent: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.FamilyRestroom,
+                    contentDescription = null,
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Selecione o Dependente:",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                dependents.forEach { dependent ->
+                    val isSelected = dependent.id == selectedDependentId
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectDependent(dependent.id) },
+                        label = {
+                            Text(
+                                text = dependent.name.ifBlank { "Dependente" },
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Face,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CamilaGreen,
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                            containerColor = CamilaOrange.copy(alpha = 0.08f),
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            iconColor = CamilaOrange
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoDependentsWarningCard() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(CamilaOrange.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FamilyRestroom,
+                        contentDescription = null,
+                        tint = CamilaOrange,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Nenhum dependente vinculado ao seu perfil",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Procure a coordenação ou serviço social da Associação Camila para vincular seus filhos ou familiares.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CamilaGray,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudentWorkshopsHeader(
+    total: Int,
+    targetName: String? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -152,7 +338,7 @@ private fun StudentWorkshopsHeader(total: Int) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Minhas Oficinas",
+                        text = if (targetName != null) "Oficinas de $targetName" else "Minhas Oficinas",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White,
                     )
@@ -210,7 +396,7 @@ private fun StudentWorkshopCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Verified,
@@ -220,7 +406,7 @@ private fun StudentWorkshopCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Matriculado",
+                            text = "Matriculado(a)",
                             color = CamilaGreenDark,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         )
@@ -229,7 +415,7 @@ private fun StudentWorkshopCard(
 
                 IconButton(
                     onClick = { expanded = !expanded },
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(28.dp),
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -241,246 +427,141 @@ private fun StudentWorkshopCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Nome da Oficina em destaque
+            // Nome da Oficina
             Text(
                 text = workshop.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = CamilaGreenDark,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Nome do professor/orientador com ícone
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    tint = CamilaOrange,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
+            if (workshop.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = getWorkshopTeacherName(workshop),
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    text = workshop.description,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = CamilaGray,
+                    lineHeight = 20.sp,
                 )
             }
 
-            // Conteúdo Expandido
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Informações Compactas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                InfoTag(
+                    icon = Icons.Default.Groups,
+                    text = "${workshop.enrolledStudentIds.size} participantes",
+                    tint = CamilaGreenDark,
+                )
+
+                InfoTag(
+                    icon = Icons.Default.Person,
+                    text = if (workshop.teacherId.isNotBlank()) "Professor atribuído" else "A definir",
+                    tint = CamilaOrange,
+                )
+            }
+
+            // Seção Expansível
             if (expanded) {
                 Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(
-                    color = CamilaGray.copy(alpha = 0.2f),
-                    thickness = 1.dp,
-                )
+                HorizontalDivider(color = BackgroundLight, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Descrição detalhada da oficina
-                if (workshop.description.isNotBlank()) {
-                    Text(
-                        text = "Sobre a Oficina",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = CamilaGreenDark,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = workshop.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 20.sp,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
+                Text(
+                    text = "Detalhes Pedagógicos",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                )
 
-                // Card com Dias/Horários e Local na ONG Camila
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = BackgroundLight),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        // Linha Horário
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(CamilaOrange.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Schedule,
-                                    contentDescription = null,
-                                    tint = CamilaOrange,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Dias e Horários",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = CamilaGray,
-                                )
-                                Text(
-                                    text = getWorkshopSchedule(workshop.name),
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                        // Linha Local
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(CamilaGreen.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Place,
-                                    contentDescription = null,
-                                    tint = CamilaGreenDark,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Local das Aulas",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = CamilaGray,
-                                )
-                                Text(
-                                    text = getWorkshopLocation(workshop.name),
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                    }
-                }
+                DetailItem(
+                    icon = Icons.Default.DateRange,
+                    label = "Frequência:",
+                    value = "Encontros semanais presenciais",
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                // Seção "Professor Responsável"
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = CamilaGreen.copy(alpha = 0.08f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(CamilaGreen.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = CamilaGreenDark,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Professor Responsável",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = CamilaGreenDark,
-                            )
-                            Text(
-                                text = getWorkshopTeacherDetail(workshop),
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "contato@associacaocamila.org",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = CamilaGray,
-                            )
-                        }
-                    }
-                }
+                DetailItem(
+                    icon = Icons.Default.Schedule,
+                    label = "Carga Horária:",
+                    value = "Certificado de participação ao término do ciclo",
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                // Informação sobre os colegas matriculados
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Groups,
-                        contentDescription = null,
-                        tint = CamilaOrange,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "${workshop.enrolledStudentIds.size} estudantes matriculados nesta turma",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                DetailItem(
+                    icon = Icons.Default.Place,
+                    label = "Local:",
+                    value = "Sede Social - Associação Camila",
+                )
             }
         }
     }
 }
 
-private fun getWorkshopSchedule(workshopName: String): String {
-    val name = workshopName.lowercase()
-    return when {
-        "fortalecimento" in name -> "Terças e Quintas • 14h às 16h"
-        ("mídia" in name) || ("midia" in name) -> "Segundas e Quartas • 09h às 11h"
-        ("interconexão" in name) || ("interconexao" in name) -> "Sextas-feiras • 13h30 às 16h30"
-        else -> "Segundas e Quartas • 14h às 16h"
-    }
-}
-
-private fun getWorkshopLocation(workshopName: String): String {
-    val name = workshopName.lowercase()
-    return when {
-        ("mídia" in name) || ("midia" in name) -> "Laboratório de Comunicação • Sede Associação Camila"
-        "fortalecimento" in name -> "Sala Multiuso 1 • Sede Associação Camila"
-        ("interconexão" in name) || ("interconexao" in name) -> "Espaço Maker & Inovação • Sede Associação Camila"
-        else -> "Sala de Oficinas Pedagógicas • Sede Associação Camila"
-    }
-}
-
-private fun getWorkshopTeacherName(workshop: Workshop): String {
-    val name = workshop.name.lowercase()
-    return when {
-        "fortalecimento" in name -> "Profª. Ana Paula (Orientadora Social)"
-        ("mídia" in name) || ("midia" in name) -> "Prof. Carlos Eduardo (Comunicação)"
-        ("interconexão" in name) || ("interconexao" in name) -> "Prof. Rafael Santos (Tecnologia)"
-        workshop.teacherId.isNotBlank() -> "Professor(a) Vinculado(a)"
-        else -> "Educador Social da Associação Camila"
-    }
-}
-
-private fun getWorkshopTeacherDetail(workshop: Workshop): String {
-    val name = workshop.name.lowercase()
-    return when {
-        "fortalecimento" in name -> "Profª. Ana Paula — Pedagogia e Assistência Social"
-        ("mídia" in name) || ("midia" in name) -> "Prof. Carlos Eduardo — Comunicação e Audiovisual"
-        ("interconexão" in name) || ("interconexao" in name) -> "Prof. Rafael Santos — Robótica e Inclusão Digital"
-        else -> "Equipe Pedagógica — Associação Camila"
+@Composable
+private fun InfoTag(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    tint: Color,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
 @Composable
-private fun EmptyStudentWorkshopsState(modifier: Modifier = Modifier) {
+private fun DetailItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CamilaGray,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "$label ",
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = CamilaGray,
+        )
+    }
+}
+
+@Composable
+private fun EmptyStudentWorkshopsState(
+    isDependent: Boolean = false,
+    dependentName: String? = null,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -493,13 +574,13 @@ private fun EmptyStudentWorkshopsState(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(CamilaOrange.copy(alpha = 0.12f)),
+                    .background(CamilaGreen.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.DateRange,
+                    imageVector = Icons.Default.School,
                     contentDescription = null,
-                    tint = CamilaOrange,
+                    tint = CamilaGreen,
                     modifier = Modifier.size(36.dp),
                 )
             }
@@ -507,7 +588,11 @@ private fun EmptyStudentWorkshopsState(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Você ainda não está matriculado em nenhuma oficina",
+                text = if (isDependent && !dependentName.isNullOrBlank()) {
+                    "$dependentName ainda não está matriculado(a) em nenhuma oficina"
+                } else {
+                    "Você ainda não está matriculado em nenhuma oficina"
+                },
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = CamilaGreenDark,
                 textAlign = TextAlign.Center,
@@ -551,28 +636,5 @@ private fun StudentWorkshopsScreenPreview() {
                 ),
             ),
         )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun StudentWorkshopCardExpandedPreview() {
-    AssociacaoCamilaTheme {
-        Box(
-            modifier = Modifier
-                .background(BackgroundLight)
-                .padding(16.dp),
-        ) {
-            StudentWorkshopCard(
-                workshop = Workshop(
-                    id = "1",
-                    name = "Oficina de Fortalecimento",
-                    description = "Encontros socioeducativos, desenvolvimento cidadão e apoio às famílias.",
-                    teacherId = "t1",
-                    enrolledStudentIds = listOf("s1", "s2", "s3", "s4", "s5"),
-                ),
-                initialExpanded = true,
-            )
-        }
     }
 }

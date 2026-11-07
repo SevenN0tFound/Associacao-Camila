@@ -16,11 +16,15 @@ private val CamilaColorScheme = lightColorScheme(
     secondaryContainer = Color(0xFFFFEBD6),
     onSecondaryContainer = CamilaOrangeDark,
 
-    tertiary = CamilaBlue,
+    tertiary = CamilaOrangeDark,
+    onTertiary = SurfaceWhite,
+    tertiaryContainer = Color(0xFFFFE6E0),
+    onTertiaryContainer = CamilaOrangeDark,
+
     background = BackgroundLight,
     surface = SurfaceWhite,
     onBackground = TextDark,
-    onSurface = TextDark
+    onSurface = TextDark,
 )
 
 @Composable

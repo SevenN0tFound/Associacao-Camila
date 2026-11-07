@@ -3,6 +3,7 @@ package com.associacaocamila.app.ui.attendance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.associacaocamila.app.data.model.AttendanceRecord
+import com.associacaocamila.app.data.model.EligibleParticipant
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.data.repository.AttendanceRepository
@@ -21,6 +22,7 @@ data class AttendanceUiState(
     val selectedWorkshop: Workshop? = null,
     val isLoadingStudents: Boolean = false,
     val students: List<User> = emptyList(),
+    val participants: List<EligibleParticipant> = emptyList(),
     val attendanceMap: Map<String, Boolean> = emptyMap(),
     val isSubmitting: Boolean = false,
     val userMessage: String? = null,
@@ -84,6 +86,7 @@ class AttendanceViewModel(
                 it.copy(
                     isLoadingStudents = true,
                     students = emptyList(),
+                    participants = emptyList(),
                     attendanceMap = emptyMap(),
                     errorMessage = null
                 )
@@ -94,14 +97,14 @@ class AttendanceViewModel(
                 return@launch
             }
 
-            repository.getStudentsForWorkshop(workshop.enrolledStudentIds)
-                .onSuccess { students ->
-                    // Por padrão institucional, todos os alunos iniciam com presença marcada (true)
-                    val defaultAttendance = students.associateBy({ it.id }, { true })
+            repository.getParticipantsForWorkshop(workshop.enrolledStudentIds)
+                .onSuccess { participants ->
+                    // Por padrão institucional, todos os participantes iniciam com presença marcada (true)
+                    val defaultAttendance = participants.associateBy({ it.id }, { true })
                     _uiState.update {
                         it.copy(
                             isLoadingStudents = false,
-                            students = students,
+                            participants = participants,
                             attendanceMap = defaultAttendance
                         )
                     }
@@ -111,7 +114,7 @@ class AttendanceViewModel(
                         it.copy(
                             isLoadingStudents = false,
                             errorMessage = error.localizedMessage
-                                ?: "Erro ao carregar os alunos matriculados."
+                                ?: "Erro ao carregar os participantes matriculados."
                         )
                     }
                 }
@@ -129,7 +132,7 @@ class AttendanceViewModel(
 
     fun markAll(present: Boolean) {
         _uiState.update { state ->
-            val updatedMap = state.students.associate { it.id to present }
+            val updatedMap = state.participants.associate { it.id to present }
             state.copy(attendanceMap = updatedMap)
         }
     }

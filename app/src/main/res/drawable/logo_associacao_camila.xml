@@ -1,0 +1,36 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Círculo de fundo suave institucional -->
+    <path
+        android:fillColor="#E0F5EC"
+        android:pathData="M100,10 A90,90 0 1,1 99.9,10 Z" />
+
+    <!-- Círculo interior branco de contraste -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,22 A78,78 0 1,1 99.9,22 Z" />
+
+    <!-- Elemento Símbolo da Marca: Coração estilizado em Laranja Oficial (PANTONE 144 C) -->
+    <path
+        android:fillColor="#F68A1E"
+        android:pathData="M100,154 C97,151 44,103 44,68 C44,48 60,32 80,32 C91,32 97,38 100,43 C103,38 109,32 120,32 C140,32 156,48 156,68 C156,103 103,151 100,154 Z" />
+
+    <!-- Acolhimento e Proteção da Vida: Mãos/Asas em Verde Oficial (PANTONE 3405 C) -->
+    <path
+        android:fillColor="#00A669"
+        android:pathData="M100,146 C105,138 142,100 142,74 C142,58 130,46 116,46 C108,46 103,50 100,56 C97,50 92,46 84,46 C70,46 58,58 58,74 C58,100 95,138 100,146 Z" />
+
+    <!-- Núcleo de calor e esperança: Pequeno coração interior em Amarelo Institucional -->
+    <path
+        android:fillColor="#FFFFDD00"
+        android:pathData="M100,118 C102,113 124,90 124,76 C124,67 117,60 109,60 C105,60 102,62 100,66 C98,62 95,60 91,60 C83,60 76,67 76,76 C76,90 98,113 100,118 Z" />
+
+    <!-- Ponto central de vida em Laranja Vivo -->
+    <path
+        android:fillColor="#EF4B22"
+        android:pathData="M100,88 A8,8 0 1,1 99.9,88 Z" />
+</vector>

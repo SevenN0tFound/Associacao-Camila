@@ -28,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -78,6 +81,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.associacaocamila.app.data.model.EligibleParticipant
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
@@ -116,9 +120,15 @@ fun AdminWorkshopsScreen(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
         onSeedMockData = { viewModel.seedMockWorkshops() },
-        onCreateWorkshop = { name, desc, teacherId, students, onSuccess ->
-            viewModel.createWorkshop(name, desc, teacherId, students, onSuccess)
+        onCreateWorkshop = { name, desc, teacherId, participants, onSuccess ->
+            viewModel.createWorkshop(name, desc, teacherId, participants, onSuccess)
         },
+        onEditClick = { viewModel.selectWorkshopForEdit(it) },
+        onDismissEdit = { viewModel.selectWorkshopForEdit(null) },
+        onSaveWorkshopEdit = { viewModel.updateWorkshop(it) },
+        onDeleteClick = { viewModel.selectWorkshopForDelete(it) },
+        onDismissDelete = { viewModel.selectWorkshopForDelete(null) },
+        onConfirmDelete = { viewModel.deleteWorkshop(it) },
         onDismissError = { viewModel.clearMessages() },
         modifier = modifier,
     )
@@ -131,6 +141,12 @@ fun AdminWorkshopsContent(
     snackbarHostState: SnackbarHostState,
     onSeedMockData: () -> Unit,
     onCreateWorkshop: (String, String, String, List<String>, () -> Unit) -> Unit,
+    onEditClick: (Workshop) -> Unit,
+    onDismissEdit: () -> Unit,
+    onSaveWorkshopEdit: (Workshop) -> Unit,
+    onDeleteClick: (Workshop) -> Unit,
+    onDismissDelete: () -> Unit,
+    onConfirmDelete: (String) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -148,7 +164,7 @@ fun AdminWorkshopsContent(
                 onClick = { showCreateBottomSheet = true },
                 containerColor = CamilaGreen,
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = CircleShape,
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -240,7 +256,9 @@ fun AdminWorkshopsContent(
 
                         WorkshopAdminCard(
                             workshop = workshop,
-                            teacherName = teacherName
+                            teacherName = teacherName,
+                            onEditClick = { onEditClick(workshop) },
+                            onDeleteClick = { onDeleteClick(workshop) }
                         )
                     }
                 }
@@ -296,24 +314,93 @@ fun AdminWorkshopsContent(
         )
     }
 
-    // ModalBottomSheet para criar nova turma
+    // Diálogo de confirmação para Exclusão de Oficina
+    uiState.workshopToDelete?.let { workshopToDelete ->
+        AlertDialog(
+            onDismissRequest = onDismissDelete,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Excluir Oficina",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Deseja realmente excluir a oficina \"${workshopToDelete.name}\"? Esta ação não poderá ser desfeita e removerá os vínculos da turma.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CamilaGray,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { onConfirmDelete(workshopToDelete.id) },
+                    enabled = !uiState.isDeleting,
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange)
+                ) {
+                    if (uiState.isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Excluir", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismissDelete,
+                    enabled = !uiState.isDeleting
+                ) {
+                    Text("Cancelar", color = CamilaGray)
+                }
+            },
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // ModalBottomSheet para criar nova turma com lista de participantes (Alunos + Dependentes)
     if (showCreateBottomSheet) {
         CreateWorkshopBottomSheet(
             teachers = uiState.teachers,
-            students = uiState.students,
+            participants = uiState.eligibleParticipants,
             isCreating = uiState.isCreating,
             onDismiss = {
                 coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                     showCreateBottomSheet = false
                 }
             },
-            onCreate = { name, desc, teacherId, students ->
-                onCreateWorkshop(name, desc, teacherId, students) {
+            onCreate = { name, desc, teacherId, participants ->
+                onCreateWorkshop(name, desc, teacherId, participants) {
                     coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                         showCreateBottomSheet = false
                     }
                 }
             }
+        )
+    }
+
+    // ModalBottomSheet para editar turma selecionada
+    uiState.workshopToEdit?.let { workshopToEdit ->
+        EditWorkshopBottomSheet(
+            workshop = workshopToEdit,
+            teachers = uiState.teachers,
+            participants = uiState.eligibleParticipants,
+            isUpdating = uiState.isUpdating,
+            onDismiss = onDismissEdit,
+            onSave = onSaveWorkshopEdit
         )
     }
 }
@@ -398,6 +485,8 @@ private fun WorkshopsHeader(
 private fun WorkshopAdminCard(
     workshop: Workshop,
     teacherName: String?,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -421,16 +510,46 @@ private fun WorkshopAdminCard(
                     modifier = Modifier.weight(1f)
                 )
 
-                Surface(
-                    color = CamilaGreen.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(8.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "${workshop.enrolledStudentIds.size} aluno(s)",
-                        color = CamilaGreenDark,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Surface(
+                        color = CamilaGreen.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "${workshop.enrolledStudentIds.size} participante(s)",
+                            color = CamilaGreenDark,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Editar oficina ${workshop.name}",
+                            tint = CamilaGreenDark,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Excluir oficina ${workshop.name}",
+                            tint = CamilaOrange,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -485,7 +604,7 @@ private fun WorkshopAdminCard(
 @Composable
 private fun CreateWorkshopBottomSheet(
     teachers: List<User>,
-    students: List<User>,
+    participants: List<EligibleParticipant>,
     isCreating: Boolean,
     onDismiss: () -> Unit,
     onCreate: (String, String, String, List<String>) -> Unit,
@@ -495,7 +614,7 @@ private fun CreateWorkshopBottomSheet(
     var selectedTeacherId by rememberSaveable { mutableStateOf(teachers.firstOrNull()?.id.orEmpty()) }
     var teacherDropdownExpanded by remember { mutableStateOf(false) }
 
-    val selectedStudentIds = remember { mutableStateListOf<String>() }
+    val selectedParticipantIds = remember { mutableStateListOf<String>() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -623,61 +742,61 @@ private fun CreateWorkshopBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Seleção de Alunos
+            // Seleção de Participantes (Alunos e Dependentes)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Matricular Alunos (${selectedStudentIds.size})",
+                    text = "Matricular Participantes (${selectedParticipantIds.size})",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                if (students.isNotEmpty()) {
+                if (participants.isNotEmpty()) {
                     TextButton(
                         onClick = {
-                            if (selectedStudentIds.size == students.size) {
-                                selectedStudentIds.clear()
+                            if (selectedParticipantIds.size == participants.size) {
+                                selectedParticipantIds.clear()
                             } else {
-                                selectedStudentIds.clear()
-                                selectedStudentIds.addAll(students.map { it.id })
+                                selectedParticipantIds.clear()
+                                selectedParticipantIds.addAll(participants.map { it.id })
                             }
                         }
                     ) {
                         Text(
-                            text = if (selectedStudentIds.size == students.size) "Desmarcar todos" else "Marcar todos",
+                            text = if (selectedParticipantIds.size == participants.size) "Desmarcar todos" else "Marcar todos",
                             color = CamilaGreen
                         )
                     }
                 }
             }
 
-            if (students.isEmpty()) {
+            if (participants.isEmpty()) {
                 Surface(
                     color = CamilaGray.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Nenhum aluno aprovado disponível para matrícula.",
+                        text = "Nenhum participante (aluno ou dependente) disponível para matrícula.",
                         color = CamilaGray,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(10.dp)
                     )
                 }
             } else {
-                students.forEach { student ->
-                    val isSelected = selectedStudentIds.contains(student.id)
+                participants.forEach { participant ->
+                    val isSelected = selectedParticipantIds.contains(participant.id)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 if (isSelected) {
-                                    selectedStudentIds.remove(student.id)
+                                    selectedParticipantIds.remove(participant.id)
                                 } else {
-                                    selectedStudentIds.add(student.id)
+                                    selectedParticipantIds.add(participant.id)
                                 }
                             }
                             .padding(vertical = 4.dp),
@@ -687,23 +806,53 @@ private fun CreateWorkshopBottomSheet(
                             checked = isSelected,
                             onCheckedChange = { checked ->
                                 if (checked) {
-                                    selectedStudentIds.add(student.id)
+                                    selectedParticipantIds.add(participant.id)
                                 } else {
-                                    selectedStudentIds.remove(student.id)
+                                    selectedParticipantIds.remove(participant.id)
                                 }
                             },
                             colors = CheckboxDefaults.colors(checkedColor = CamilaGreen)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
-                            Text(
-                                text = student.name.ifBlank { "Sem nome" },
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            if (student.email.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = student.email,
+                                    text = participant.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = if (participant.isDependent) CamilaOrange.copy(alpha = 0.12f) else CamilaGreen.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = if (participant.isDependent) "Dependente" else "Aluno",
+                                        color = if (participant.isDependent) CamilaOrange else CamilaGreenDark,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Face,
+                                        contentDescription = null,
+                                        tint = CamilaOrange,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Responsável: ${participant.responsibleName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CamilaOrange
+                                    )
+                                }
+                            } else if (!participant.email.isNullOrBlank()) {
+                                Text(
+                                    text = participant.email,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = CamilaGray
                                 )
@@ -722,7 +871,7 @@ private fun CreateWorkshopBottomSheet(
                         name,
                         description,
                         selectedTeacherId,
-                        selectedStudentIds.toList()
+                        selectedParticipantIds.toList()
                     )
                 },
                 enabled = !isCreating && name.isNotBlank(),
@@ -744,6 +893,317 @@ private fun CreateWorkshopBottomSheet(
                 } else {
                     Text(
                         text = "Cadastrar Turma",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditWorkshopBottomSheet(
+    workshop: Workshop,
+    teachers: List<User>,
+    participants: List<EligibleParticipant>,
+    isUpdating: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (Workshop) -> Unit,
+) {
+    var name by rememberSaveable(workshop.id) { mutableStateOf(workshop.name) }
+    var description by rememberSaveable(workshop.id) { mutableStateOf(workshop.description) }
+    var selectedTeacherId by rememberSaveable(workshop.id) {
+        mutableStateOf(workshop.teacherId.ifBlank { teachers.firstOrNull()?.id.orEmpty() })
+    }
+    var teacherDropdownExpanded by remember { mutableStateOf(false) }
+
+    val selectedParticipantIds = remember(workshop.id) {
+        mutableStateListOf<String>().apply { addAll(workshop.enrolledStudentIds) }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Editar Turma",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Fechar")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Nome da Oficina
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nome da Oficina / Turma") },
+                placeholder = { Text("Ex: Oficina de Artes Marciais") },
+                singleLine = true,
+                colors = outlinedFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Descrição
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Descrição dos Objetivos") },
+                placeholder = { Text("Breve descrição das atividades desenvolvidas...") },
+                minLines = 2,
+                maxLines = 4,
+                colors = outlinedFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Dropdown de Professor
+            Text(
+                text = "Professor(a) Responsável",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            if (teachers.isEmpty()) {
+                Surface(
+                    color = CamilaOrange.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Aviso: Nenhum professor aprovado cadastrado no momento.",
+                        color = CamilaOrange,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            } else {
+                val selectedTeacher = teachers.firstOrNull { it.id == selectedTeacherId } ?: teachers.first()
+
+                ExposedDropdownMenuBox(
+                    expanded = teacherDropdownExpanded,
+                    onExpandedChange = { teacherDropdownExpanded = !teacherDropdownExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedTeacher.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = teacherDropdownExpanded)
+                        },
+                        colors = outlinedFieldColors(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = teacherDropdownExpanded,
+                        onDismissRequest = { teacherDropdownExpanded = false }
+                    ) {
+                        teachers.forEach { teacher ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = teacher.name,
+                                        fontWeight = if (teacher.id == selectedTeacher.id) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (teacher.id == selectedTeacher.id) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    selectedTeacherId = teacher.id
+                                    teacherDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Seleção de Participantes
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Participantes Matriculados (${selectedParticipantIds.size})",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (participants.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            if (selectedParticipantIds.size == participants.size) {
+                                selectedParticipantIds.clear()
+                            } else {
+                                selectedParticipantIds.clear()
+                                selectedParticipantIds.addAll(participants.map { it.id })
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = if (selectedParticipantIds.size == participants.size) "Desmarcar todos" else "Marcar todos",
+                            color = CamilaGreen
+                        )
+                    }
+                }
+            }
+
+            if (participants.isEmpty()) {
+                Surface(
+                    color = CamilaGray.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Nenhum participante disponível para matrícula.",
+                        color = CamilaGray,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            } else {
+                participants.forEach { participant ->
+                    val isSelected = selectedParticipantIds.contains(participant.id)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (isSelected) {
+                                    selectedParticipantIds.remove(participant.id)
+                                } else {
+                                    selectedParticipantIds.add(participant.id)
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    selectedParticipantIds.add(participant.id)
+                                } else {
+                                    selectedParticipantIds.remove(participant.id)
+                                }
+                            },
+                            colors = CheckboxDefaults.colors(checkedColor = CamilaGreen)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = participant.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = if (participant.isDependent) CamilaOrange.copy(alpha = 0.12f) else CamilaGreen.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = if (participant.isDependent) "Dependente" else "Aluno",
+                                        color = if (participant.isDependent) CamilaOrange else CamilaGreenDark,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Face,
+                                        contentDescription = null,
+                                        tint = CamilaOrange,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Responsável: ${participant.responsibleName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CamilaOrange
+                                    )
+                                }
+                            } else if (!participant.email.isNullOrBlank()) {
+                                Text(
+                                    text = participant.email,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CamilaGray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Botão Salvar Alterações
+            Button(
+                onClick = {
+                    onSave(
+                        workshop.copy(
+                            name = name.trim(),
+                            description = description.trim(),
+                            teacherId = selectedTeacherId.trim(),
+                            enrolledStudentIds = selectedParticipantIds.toList()
+                        )
+                    )
+                },
+                enabled = !isUpdating && name.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CamilaGreen,
+                    disabledContainerColor = CamilaGreen.copy(alpha = 0.5f)
+                )
+            ) {
+                if (isUpdating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Salvar Alterações",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
@@ -858,14 +1318,20 @@ private fun AdminWorkshopsScreenPreview() {
                 teachers = listOf(
                     User(id = "t1", name = "Prof. Marcelo Ramos", role = UserRole.PROFESSOR, status = UserStatus.APPROVED)
                 ),
-                students = listOf(
-                    User(id = "s1", name = "Gabriel Silva", role = UserRole.ALUNO, status = UserStatus.APPROVED),
-                    User(id = "s2", name = "Larissa Costa", role = UserRole.ALUNO, status = UserStatus.APPROVED)
+                eligibleParticipants = listOf(
+                    EligibleParticipant(id = "s1", name = "Gabriel Silva", isDependent = false, email = "gabriel@email.com"),
+                    EligibleParticipant(id = "s2", name = "Lucas Mendes", isDependent = true, responsibleName = "Mariana Mendes")
                 )
             ),
             snackbarHostState = remember { SnackbarHostState() },
             onSeedMockData = {},
             onCreateWorkshop = { _, _, _, _, _ -> },
+            onEditClick = {},
+            onDismissEdit = {},
+            onSaveWorkshopEdit = {},
+            onDeleteClick = {},
+            onDismissDelete = {},
+            onConfirmDelete = {},
             onDismissError = {}
         )
     }

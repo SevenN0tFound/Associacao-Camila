@@ -206,22 +206,10 @@ private fun HeaderSection() {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(top = 16.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .background(
-                    color = CamilaGreen.copy(alpha = 0.12f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = CamilaGreen,
-                modifier = Modifier.size(40.dp)
-            )
-        }
+        com.associacaocamila.app.ui.components.CamilaLogo(
+            size = 110.dp,
+            contentDescription = "Logotipo Oficial Associação Camila"
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -235,14 +223,15 @@ private fun HeaderSection() {
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Em defesa e valorização da vida",
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = FontWeight.Medium
+            text = "EM DEFESA E VALORIZAÇÃO DA VIDA",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp
             ),
-            color = CamilaOrange,
+            color = CamilaGray,
             textAlign = TextAlign.Center
         )
     }

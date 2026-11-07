@@ -1,5 +1,6 @@
 package com.associacaocamila.app.data.repository
 
+import com.associacaocamila.app.data.model.EligibleParticipant
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
@@ -13,8 +14,11 @@ import kotlinx.coroutines.tasks.await
 interface WorkshopRepository {
     fun getAllWorkshops(): Flow<List<Workshop>>
     suspend fun createWorkshop(workshop: Workshop): Result<Unit>
+    suspend fun updateWorkshop(workshop: Workshop): Result<Unit>
+    suspend fun deleteWorkshop(workshopId: String): Result<Unit>
     suspend fun getApprovedTeachers(): Result<List<User>>
     suspend fun getApprovedStudents(): Result<List<User>>
+    suspend fun getEligibleParticipants(): Result<List<EligibleParticipant>>
     suspend fun seedMockWorkshops(): Result<Unit>
 }
 
@@ -49,6 +53,16 @@ class WorkshopRepositoryImpl(
         docRef.set(itemToSave).await()
     }
 
+    override suspend fun updateWorkshop(workshop: Workshop): Result<Unit> = runCatching {
+        require(workshop.id.isNotBlank()) { "ID da oficina não pode ser vazio para atualização." }
+        workshopsCollection.document(workshop.id).set(workshop).await()
+    }
+
+    override suspend fun deleteWorkshop(workshopId: String): Result<Unit> = runCatching {
+        require(workshopId.isNotBlank()) { "ID da oficina não pode ser vazio para exclusão." }
+        workshopsCollection.document(workshopId).delete().await()
+    }
+
     override suspend fun getApprovedTeachers(): Result<List<User>> = runCatching {
         val snapshot = usersCollection
             .whereEqualTo("role", UserRole.PROFESSOR.name)
@@ -73,12 +87,54 @@ class WorkshopRepositoryImpl(
         }
     }
 
+    override suspend fun getEligibleParticipants(): Result<List<EligibleParticipant>> = runCatching {
+        // Busca usuários com perfil ALUNO aprovados
+        val studentsSnapshot = usersCollection
+            .whereEqualTo("role", UserRole.ALUNO.name)
+            .whereEqualTo("status", UserStatus.APPROVED.name)
+            .get()
+            .await()
+
+        val studentsList = studentsSnapshot.documents.mapNotNull { doc ->
+            val user = doc.toObject(User::class.java)?.copy(id = doc.id) ?: return@mapNotNull null
+            EligibleParticipant(
+                id = user.id,
+                name = user.name.ifBlank { "Sem nome" },
+                isDependent = false,
+                email = user.email
+            )
+        }
+
+        // Busca usuários com perfil RESPONSAVEL aprovados para extrair seus dependentes
+        val responsiblesSnapshot = usersCollection
+            .whereEqualTo("role", UserRole.RESPONSAVEL.name)
+            .whereEqualTo("status", UserStatus.APPROVED.name)
+            .get()
+            .await()
+
+        val dependentsList = responsiblesSnapshot.documents.flatMap { doc ->
+            val responsible = doc.toObject(User::class.java)?.copy(id = doc.id) ?: return@flatMap emptyList()
+            responsible.dependents.map { dependent ->
+                EligibleParticipant(
+                    id = dependent.id,
+                    name = dependent.name.ifBlank { "Sem nome" },
+                    isDependent = true,
+                    responsibleName = responsible.name.ifBlank { "Responsável" },
+                    relationship = dependent.relationship,
+                    email = null
+                )
+            }
+        }
+
+        studentsList + dependentsList
+    }
+
     override suspend fun seedMockWorkshops(): Result<Unit> = runCatching {
         val teachers = getApprovedTeachers().getOrDefault(emptyList())
-        val students = getApprovedStudents().getOrDefault(emptyList())
+        val participants = getEligibleParticipants().getOrDefault(emptyList())
 
         val assignedTeacherId = teachers.firstOrNull()?.id.orEmpty()
-        val allStudentIds = students.map { it.id }
+        val allParticipantIds = participants.map { it.id }
 
         // Consulta oficinas já existentes para evitar duplicidade de nomes
         val existingSnapshot = workshopsCollection.get().await()
@@ -91,19 +147,19 @@ class WorkshopRepositoryImpl(
                 name = "Oficina de Fortalecimento",
                 description = "Encontros socioeducativos, desenvolvimento cidadão e apoio psicossocial às famílias.",
                 teacherId = assignedTeacherId,
-                enrolledStudentIds = allStudentIds,
+                enrolledStudentIds = allParticipantIds,
             ),
             Workshop(
                 name = "Projeto Mídias Force",
                 description = "Capacitação prática em comunicação comunitária, edição audiovisual e mídias sociais.",
                 teacherId = assignedTeacherId,
-                enrolledStudentIds = allStudentIds.take(allStudentIds.size.coerceAtLeast(1)),
+                enrolledStudentIds = allParticipantIds.take(allParticipantIds.size.coerceAtLeast(1)),
             ),
             Workshop(
                 name = "Projeto Interconexão",
                 description = "Inclusão digital, tecnologia e robótica para o futuro profissional e acadêmico dos jovens.",
                 teacherId = assignedTeacherId,
-                enrolledStudentIds = allStudentIds,
+                enrolledStudentIds = allParticipantIds,
             ),
         )
 

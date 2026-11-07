@@ -162,14 +162,6 @@ fun HomeScreen(
         }
     }
 
-    val targetStudentId = remember(userState) {
-        if ((userState.role == UserRole.RESPONSAVEL) && userState.associatedStudentIds.isNotEmpty()) {
-            userState.associatedStudentIds.first()
-        } else {
-            userState.id
-        }
-    }
-
     var selectedRoute by rememberSaveable(userState.role) {
         mutableStateOf(NavigationItem.Inicio.route)
     }
@@ -205,36 +197,51 @@ fun HomeScreen(
                                 .padding(16.dp)
                         ) {
                             Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.White.copy(alpha = 0.2f)),
-                                        contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
                                     ) {
-                                       Icon(
-                                           imageVector = Icons.Default.Person,
-                                           contentDescription = null,
-                                           tint = Color.White,
-                                           modifier = Modifier.size(28.dp)
-                                       )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                           Icon(
+                                               imageVector = Icons.Default.Person,
+                                               contentDescription = null,
+                                               tint = Color.White,
+                                               modifier = Modifier.size(28.dp)
+                                           )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = userState.name.ifBlank { "Utilizador" },
+                                                style = MaterialTheme.typography.titleMedium.copy(
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                text = userState.email.ifBlank { "Sem e-mail" },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White.copy(alpha = 0.85f)
+                                            )
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = userState.name.ifBlank { "Utilizador" },
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = userState.email.ifBlank { "Sem e-mail" },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.White.copy(alpha = 0.85f)
-                                        )
-                                    }
+
+                                    // Logo Oficial da Associação Camila
+                                    com.associacaocamila.app.ui.components.CamilaLogo(
+                                        size = 40.dp,
+                                        contentDescription = "Logo Associação Camila"
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -384,8 +391,8 @@ fun HomeScreen(
             ) { navItem ->
                 when (navItem) {
                     is NavigationItem.Inicio -> InicioTabContent(currentUser = userState)
-                    is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(studentId = targetStudentId)
-                    is NavigationItem.Frequencia -> StudentAttendanceScreen(studentId = targetStudentId)
+                    is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
+                    is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
                     is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
                     is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()

@@ -23,9 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -47,6 +48,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,9 +68,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.associacaocamila.app.data.model.User
-import com.associacaocamila.app.data.model.UserRole
-import com.associacaocamila.app.data.model.UserStatus
+import com.associacaocamila.app.data.model.EligibleParticipant
 import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
@@ -120,7 +120,7 @@ fun AttendanceScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(16.dp)
+                .padding(bottom = 16.dp)
         )
     }
 }
@@ -134,15 +134,11 @@ fun AttendanceContent(
     onSubmitAttendance: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val currentDateFormatted = remember {
-        val locale = Locale.forLanguageTag("pt-BR")
-        val sdf = SimpleDateFormat("EEEE, dd 'de' MMMM", locale)
-        sdf.format(Date()).replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
-    }
-
     if (uiState.isLoadingWorkshops) {
         Box(
-            modifier = modifier.fillMaxSize(),
+            modifier = modifier
+                .fillMaxSize()
+                .background(BackgroundLight),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(
@@ -164,17 +160,16 @@ fun AttendanceContent(
             .background(BackgroundLight)
             .padding(16.dp)
     ) {
-        // Card de Cabeçalho da Chamada e Seleção de Oficina
-        WorkshopHeaderCard(
-            workshops = uiState.workshops,
+        // Cabeçalho institucional de seleção de turma e data
+        AttendanceHeaderCard(
             selectedWorkshop = uiState.selectedWorkshop,
-            dateFormatted = currentDateFormatted,
+            workshops = uiState.workshops,
             onSelectWorkshop = onSelectWorkshop
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Alerta de erro caso ocorra
+        // Alerta de erro caso ocorra falha
         AnimatedVisibility(
             visible = uiState.errorMessage != null,
             enter = fadeIn(),
@@ -210,12 +205,12 @@ fun AttendanceContent(
                     strokeWidth = 3.dp
                 )
             }
-        } else if (uiState.students.isEmpty()) {
+        } else if (uiState.participants.isEmpty()) {
             EmptyStudentsState(modifier = Modifier.weight(1f))
         } else {
             // Controles rápidos: presença total / faltas
             val presentCount = uiState.attendanceMap.values.count { it }
-            val totalCount = uiState.students.size
+            val totalCount = uiState.participants.size
 
             Row(
                 modifier = Modifier
@@ -248,7 +243,7 @@ fun AttendanceContent(
                 }
             }
 
-            // Lista de alunos matriculados
+            // Lista de participantes matriculados (Alunos e Dependentes)
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -257,14 +252,14 @@ fun AttendanceContent(
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 items(
-                    items = uiState.students,
+                    items = uiState.participants,
                     key = { it.id }
-                ) { student ->
-                    val isPresent = uiState.attendanceMap[student.id] ?: true
-                    StudentAttendanceItem(
-                        student = student,
+                ) { participant ->
+                    val isPresent = uiState.attendanceMap[participant.id] ?: true
+                    ParticipantAttendanceItem(
+                        participant = participant,
                         isPresent = isPresent,
-                        onToggle = { onToggleAttendance(student.id) }
+                        onToggle = { onToggleAttendance(participant.id) }
                     )
                 }
             }
@@ -275,7 +270,7 @@ fun AttendanceContent(
         // Botão Salvar Lista de Presença
         Button(
             onClick = onSubmitAttendance,
-            enabled = !uiState.isSubmitting && uiState.students.isNotEmpty(),
+            enabled = !uiState.isSubmitting && uiState.participants.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -292,13 +287,6 @@ fun AttendanceContent(
                     strokeWidth = 2.dp
                 )
             } else {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Salvar Lista de Presença",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -311,14 +299,16 @@ fun AttendanceContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WorkshopHeaderCard(
-    workshops: List<Workshop>,
+private fun AttendanceHeaderCard(
     selectedWorkshop: Workshop?,
-    dateFormatted: String,
+    workshops: List<Workshop>,
     onSelectWorkshop: (Workshop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val dateFormatted = remember {
+        SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).format(Date())
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -327,34 +317,59 @@ private fun WorkshopHeaderCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Data do dia
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(CamilaGreen.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = null,
+                            tint = CamilaGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Chamada Digital",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark
+                        )
+                        Text(
+                            text = "Registro diário de participação",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CamilaGray
+                        )
+                    }
+                }
+
+                // Badge de data
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(CamilaOrange.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BackgroundLight)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CalendarToday,
                         contentDescription = null,
                         tint = CamilaOrange,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(14.dp)
                     )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "Data da Chamada",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CamilaGray
-                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = dateFormatted,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -454,8 +469,8 @@ private fun WorkshopHeaderCard(
 }
 
 @Composable
-private fun StudentAttendanceItem(
-    student: User,
+private fun ParticipantAttendanceItem(
+    participant: EligibleParticipant,
     isPresent: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -483,7 +498,7 @@ private fun StudentAttendanceItem(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Person,
+                    imageVector = if (participant.isDependent) Icons.Default.FamilyRestroom else Icons.Default.Person,
                     contentDescription = null,
                     tint = if (isPresent) CamilaGreen else CamilaOrange,
                     modifier = Modifier.size(22.dp)
@@ -494,11 +509,28 @@ private fun StudentAttendanceItem(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = student.name.ifBlank { "Sem nome" },
+                    text = participant.name,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                if (student.email.isNotBlank()) {
+
+                if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Face,
+                            contentDescription = null,
+                            tint = CamilaOrange,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Dependente de ${participant.responsibleName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CamilaOrange,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else if (!participant.email.isNullOrBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Email,
@@ -508,11 +540,17 @@ private fun StudentAttendanceItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = student.email,
+                            text = participant.email,
                             style = MaterialTheme.typography.bodySmall,
                             color = CamilaGray
                         )
                     }
+                } else {
+                    Text(
+                        text = "Aluno",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CamilaGray
+                    )
                 }
             }
 
@@ -563,13 +601,13 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(CamilaOrange.copy(alpha = 0.12f)),
+                    .background(CamilaGreen.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.School,
                     contentDescription = null,
-                    tint = CamilaOrange,
+                    tint = CamilaGreen,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -586,7 +624,7 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Ainda não existem turmas ou oficinas vinculadas ao seu perfil de professor. Por favor, consulte a coordenação da Associação Camila.",
+                text = "Você ainda não possui turmas sob sua responsabilidade pedagógica. Entre em contato com a coordenação.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = CamilaGray,
                 textAlign = TextAlign.Center,
@@ -599,33 +637,41 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
 @Composable
 private fun EmptyStudentsState(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
+            modifier = Modifier.padding(32.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = CamilaGray,
-                modifier = Modifier.size(40.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(CamilaOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Nenhum aluno matriculado",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = CamilaGreenDark,
+                text = "Nenhum participante matriculado",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Esta turma ainda não possui estudantes cadastrados na sua lista.",
+                text = "Esta turma ainda não possui estudantes ou dependentes vinculados para realização da chamada.",
                 style = MaterialTheme.typography.bodySmall,
                 color = CamilaGray,
                 textAlign = TextAlign.Center
@@ -643,30 +689,35 @@ private fun AttendanceScreenPreview() {
                 isLoadingWorkshops = false,
                 workshops = listOf(
                     Workshop(
-                        id = "w1",
-                        name = "Oficina de Fortalecimento Juvenil",
-                        description = "Encontros de desenvolvimento socioeducativo"
-                    ),
-                    Workshop(
-                        id = "w2",
-                        name = "Mídias Force - Audiovisual",
-                        description = "Produção de vídeo e comunicação digital"
+                        id = "1",
+                        name = "Oficina de Fortalecimento",
+                        description = "Encontros socioeducativos",
+                        teacherId = "t1"
                     )
                 ),
                 selectedWorkshop = Workshop(
-                    id = "w1",
-                    name = "Oficina de Fortalecimento Juvenil"
+                    id = "1",
+                    name = "Oficina de Fortalecimento",
+                    description = "Encontros socioeducativos",
+                    teacherId = "t1"
                 ),
-                students = listOf(
-                    User(id = "s1", name = "Gabriel Oliveira", email = "gabriel@email.com", role = UserRole.ALUNO, status = UserStatus.APPROVED),
-                    User(id = "s2", name = "Juliana Costa", email = "juliana@email.com", role = UserRole.ALUNO, status = UserStatus.APPROVED),
-                    User(id = "s3", name = "Matheus Santos", email = "matheus@email.com", role = UserRole.ALUNO, status = UserStatus.APPROVED)
+                isLoadingStudents = false,
+                participants = listOf(
+                    EligibleParticipant(
+                        id = "1",
+                        name = "Ana Beatriz Souza",
+                        isDependent = false,
+                        email = "ana.souza@email.com"
+                    ),
+                    EligibleParticipant(
+                        id = "2",
+                        name = "Lucas Mendes",
+                        isDependent = true,
+                        responsibleName = "Mariana Mendes",
+                        relationship = "Filho(a)"
+                    )
                 ),
-                attendanceMap = mapOf(
-                    "s1" to true,
-                    "s2" to false,
-                    "s3" to true
-                )
+                attendanceMap = mapOf("1" to true, "2" to false)
             ),
             onSelectWorkshop = {},
             onToggleAttendance = {},
