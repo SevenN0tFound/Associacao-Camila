@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,7 +69,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -79,6 +82,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.associacaocamila.app.R
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
@@ -206,33 +210,22 @@ private fun HeaderSection() {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(top = 16.dp)
     ) {
-        com.associacaocamila.app.ui.components.CamilaLogo(
-            size = 110.dp,
-            contentDescription = "Logotipo Oficial Associação Camila"
+        Image(
+            painter = painterResource(id = R.drawable.logo_associacao_camila),
+            contentDescription = "Logo Associação Camila",
+            modifier = Modifier
+                .height(110.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            contentScale = ContentScale.Fit
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Associação Camila",
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp
-            ),
-            color = CamilaGreenDark,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
             text = "EM DEFESA E VALORIZAÇÃO DA VIDA",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.sp
-            ),
+            style = MaterialTheme.typography.labelSmall,
             color = CamilaGray,
-            textAlign = TextAlign.Center
+            letterSpacing = 1.2.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
         )
     }
 }
