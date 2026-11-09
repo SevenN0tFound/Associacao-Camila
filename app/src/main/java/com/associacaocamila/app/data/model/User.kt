@@ -13,6 +13,7 @@ data class User(
     val address: String = "",
     val medicalNotes: String = "", // Alergias, remédios contínuos ou observações
     val dependents: List<Dependent> = emptyList(),
+    val documents: List<DocumentAttachment> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
 )
 

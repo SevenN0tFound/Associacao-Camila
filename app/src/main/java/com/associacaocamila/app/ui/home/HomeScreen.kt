@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -96,10 +95,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -107,7 +104,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.associacaocamila.app.R
 import com.associacaocamila.app.data.model.Announcement
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
@@ -205,31 +201,19 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(CamilaGreen)
                                 .padding(16.dp)
                         ) {
                             Column {
-                                // Logo Oficial Institucional
-                                Image(
-                                    painter = painterResource(id = R.drawable.logo_associacao_camila),
-                                    contentDescription = "Logo Associação Camila",
-                                    modifier = Modifier
-                                        .height(55.dp)
-                                        .fillMaxWidth(),
-                                    contentScale = ContentScale.Fit
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(42.dp)
+                                            .size(46.dp)
                                             .clip(CircleShape)
                                             .background(Color.White.copy(alpha = 0.2f)),
                                         contentAlignment = Alignment.Center
@@ -238,7 +222,7 @@ fun HomeScreen(
                                             imageVector = Icons.Default.Person,
                                             contentDescription = null,
                                             tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.size(26.dp)
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -273,16 +257,6 @@ fun HomeScreen(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Text(
-                                    text = "“Em defesa e valorização da vida”",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = Color.White.copy(alpha = 0.95f)
-                                )
                             }
                         }
 
@@ -503,7 +477,7 @@ private fun InicioTabContent(
             )
         ) {
             Column(
-                modifier = Modifier.padding(20.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically
@@ -522,7 +496,7 @@ private fun InicioTabContent(
                             modifier = Modifier.size(28.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
                             text = "Olá, ${currentUser.name.ifBlank { "Membro" }}!",
@@ -531,33 +505,13 @@ private fun InicioTabContent(
                             ),
                             color = Color.White
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "Perfil: ${currentUser.role.toDisplayName()}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.9f)
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Card com o lema institucional
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "“Em defesa e valorização da vida”",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         }
@@ -1279,6 +1233,16 @@ private fun PerfilTabContent(
                 }
             }
         }
+
+        // Card 4: Documentação e Anexos (Prontuário Digital)
+        com.associacaocamila.app.ui.components.DocumentAttachmentsSection(
+            ownerId = currentUser.id,
+            documents = currentUser.documents,
+            onDocumentsChanged = { updatedDocs ->
+                onUserUpdated(currentUser.copy(documents = updatedDocs))
+            },
+            canEdit = true,
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 

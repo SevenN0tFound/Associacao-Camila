@@ -9,4 +9,5 @@ data class Dependent(
     val relationship: String = "Filho(a)", // Filho(a), Pai/Mãe, Irmão(a), Neto(a), Outro
     val medicalNotes: String = "",
     val enrolledWorkshopIds: List<String> = emptyList(),
+    val documents: List<DocumentAttachment> = emptyList(),
 )
