@@ -146,7 +146,11 @@ class AttendanceViewModel(
         }
     }
 
-    fun submitAttendance(teacherId: String, onFinished: () -> Unit = {}) {
+    fun submitAttendance(
+        teacherId: String,
+        context: android.content.Context? = null,
+        onFinished: () -> Unit = {},
+    ) {
         val currentWorkshop = _uiState.value.selectedWorkshop ?: run {
             _uiState.update { it.copy(errorMessage = "Nenhuma oficina selecionada.") }
             return
@@ -170,6 +174,22 @@ class AttendanceViewModel(
                             userMessage = "Lista de presença salva com sucesso!"
                         )
                     }
+
+                    // Dispara alerta local para cada participante que recebeu falta
+                    if (context != null) {
+                        val absentIds = record.attendanceMap.filterValues { !it }.keys
+                        val participantMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
+
+                        absentIds.forEach { absentId ->
+                            val studentName = participantMap[absentId] ?: "Participante"
+                            com.associacaocamila.app.util.NotificationHelper.sendAbsenceAlert(
+                                context = context,
+                                studentName = studentName,
+                                workshopName = currentWorkshop.name,
+                            )
+                        }
+                    }
+
                     onFinished()
                 }
                 .onFailure { error ->

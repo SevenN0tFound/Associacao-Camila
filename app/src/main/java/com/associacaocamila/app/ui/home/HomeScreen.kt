@@ -153,6 +153,21 @@ fun HomeScreen(
 ) {
     var userState by remember(currentUser) { mutableStateOf(currentUser) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    // Solicitação elegante de permissão para notificações locais (Android 13+)
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* Permissão concedida ou negada */ }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (!com.associacaocamila.app.util.NotificationHelper.hasNotificationPermission(context)) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        com.associacaocamila.app.util.NotificationHelper.createNotificationChannels(context)
+    }
 
     val navItems = remember(userState.role) {
         buildList {

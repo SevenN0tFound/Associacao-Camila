@@ -115,7 +115,7 @@ fun AttendanceScreen(
             onSelectWorkshop = { viewModel.selectWorkshop(it) },
             onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
-            onSubmitAttendance = { viewModel.submitAttendance(teacherId) },
+            onSubmitAttendance = { viewModel.submitAttendance(teacherId, context) },
             onExportPdf = { viewModel.exportAttendancePdf(context) },
         )
 

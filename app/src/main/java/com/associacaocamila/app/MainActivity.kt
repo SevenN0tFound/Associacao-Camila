@@ -25,6 +25,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Inicializa canais de notificação institucional
+        com.associacaocamila.app.util.NotificationHelper.createNotificationChannels(this)
+
         setContent {
             AssociacaoCamilaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
