@@ -41,6 +41,12 @@ class AdminApprovalsViewModel(
     private val _isAddingDependent = MutableStateFlow(false)
     val isAddingDependent: StateFlow<Boolean> = _isAddingDependent.asStateFlow()
 
+    private val _availableStudents = MutableStateFlow<List<User>>(emptyList())
+    val availableStudents: StateFlow<List<User>> = _availableStudents.asStateFlow()
+
+    private val _isLoadingStudents = MutableStateFlow(false)
+    val isLoadingStudents: StateFlow<Boolean> = _isLoadingStudents.asStateFlow()
+
     val uiState: StateFlow<AdminApprovalsUiState> = combine(
         repository.getPendingUsers(),
         repository.getApprovedUsers(),
@@ -88,6 +94,66 @@ class AdminApprovalsViewModel(
                         ?: "Não foi possível atualizar o status do usuário. Tente novamente."
                 }
             _processingUserIds.value -= userId
+        }
+    }
+
+    fun loadAvailableStudents() {
+        viewModelScope.launch {
+            _isLoadingStudents.value = true
+            repository.getAvailableStudents()
+                .onSuccess { students ->
+                    _availableStudents.value = students
+                }
+                .onFailure { error ->
+                    _actionError.value = error.localizedMessage
+                        ?: "Não foi possível carregar a lista de alunos."
+                }
+            _isLoadingStudents.value = false
+        }
+    }
+
+    fun linkStudentAsDependent(
+        guardianId: String,
+        student: User,
+        onSuccess: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _isAddingDependent.value = true
+            _actionError.value = null
+            repository.linkDependentToGuardian(guardianId, student)
+                .onSuccess {
+                    _feedbackMessage.value = "Participante ${student.name} vinculado com sucesso!"
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _actionError.value = error.localizedMessage
+                        ?: "Não foi possível vincular o participante. Tente novamente."
+                }
+            _isAddingDependent.value = false
+        }
+    }
+
+    fun unlinkDependent(
+        guardianId: String,
+        dependentId: String,
+        dependentName: String = "",
+        onSuccess: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _actionError.value = null
+            repository.unlinkDependent(guardianId, dependentId)
+                .onSuccess {
+                    _feedbackMessage.value = if (dependentName.isNotBlank()) {
+                        "Participante $dependentName desvinculado com sucesso."
+                    } else {
+                        "Participante desvinculado com sucesso."
+                    }
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _actionError.value = error.localizedMessage
+                        ?: "Não foi possível desvincular o participante."
+                }
         }
     }
 

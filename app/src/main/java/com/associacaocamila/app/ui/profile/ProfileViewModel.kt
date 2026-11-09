@@ -15,6 +15,9 @@ data class ProfileUiState(
     val isSaving: Boolean = false,
     val successMessage: String? = null,
     val errorMessage: String? = null,
+    val availableStudents: List<User> = emptyList(),
+    val isLoadingStudents: Boolean = false,
+    val isLinkingDependent: Boolean = false,
 )
 
 class ProfileViewModel(
@@ -69,6 +72,107 @@ class ProfileViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun loadAvailableStudents() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingStudents = true) }
+            userRepository.getAvailableStudents()
+                .onSuccess { students ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingStudents = false,
+                            availableStudents = students,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingStudents = false,
+                            errorMessage = error.localizedMessage
+                                ?: "Não foi possível carregar a lista de alunos.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun linkStudentAsDependent(
+        guardian: User,
+        student: User,
+        onSuccess: (User) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLinkingDependent = true, errorMessage = null, successMessage = null) }
+            userRepository.linkDependentToGuardian(guardian.id, student)
+                .onSuccess {
+                    val newDependent = com.associacaocamila.app.data.model.Dependent(
+                        id = student.id,
+                        name = student.name,
+                        birthDate = student.birthDate,
+                        relationship = "Aluno(a) / Dependente",
+                        medicalNotes = student.medicalNotes,
+                        documents = student.documents,
+                    )
+                    val updatedUser = guardian.copy(
+                        dependents = guardian.dependents + newDependent,
+                        associatedStudentIds = guardian.associatedStudentIds + student.id,
+                    )
+                    _uiState.update {
+                        it.copy(
+                            isLinkingDependent = false,
+                            successMessage = "Participante ${student.name} vinculado com sucesso!",
+                        )
+                    }
+                    onSuccess(updatedUser)
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLinkingDependent = false,
+                            errorMessage = error.localizedMessage
+                                ?: "Não foi possível vincular o participante. Tente novamente.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun unlinkDependent(
+        guardian: User,
+        dependentId: String,
+        dependentName: String = "",
+        onSuccess: (User) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+            userRepository.unlinkDependent(guardian.id, dependentId)
+                .onSuccess {
+                    val updatedUser = guardian.copy(
+                        dependents = guardian.dependents.filterNot { it.id == dependentId },
+                        associatedStudentIds = guardian.associatedStudentIds.filterNot { it == dependentId },
+                    )
+                    _uiState.update {
+                        it.copy(
+                            successMessage = if (dependentName.isNotBlank()) {
+                                "Participante $dependentName desvinculado com sucesso."
+                            } else {
+                                "Participante desvinculado com sucesso."
+                            },
+                        )
+                    }
+                    onSuccess(updatedUser)
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = error.localizedMessage
+                                ?: "Não foi possível desvincular o participante.",
+                        )
+                    }
+                }
         }
     }
 

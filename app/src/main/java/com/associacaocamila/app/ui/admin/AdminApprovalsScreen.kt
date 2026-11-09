@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.HealthAndSafety
@@ -60,6 +61,7 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,6 +105,8 @@ fun AdminApprovalsScreen(
     val feedbackMessage by viewModel.feedbackMessage.collectAsState()
     val processingUserIds by viewModel.processingUserIds.collectAsState()
     val isAddingDependent by viewModel.isAddingDependent.collectAsState()
+    val availableStudents by viewModel.availableStudents.collectAsState()
+    val isLoadingStudents by viewModel.isLoadingStudents.collectAsState()
 
     AdminApprovalsContent(
         uiState = uiState,
@@ -110,18 +114,17 @@ fun AdminApprovalsScreen(
         feedbackMessage = feedbackMessage,
         processingUserIds = processingUserIds,
         isAddingDependent = isAddingDependent,
+        availableStudents = availableStudents,
+        isLoadingStudents = isLoadingStudents,
         onApprove = { viewModel.approveUser(it) },
         onReject = { viewModel.rejectUser(it) },
-        onAddDependent = { userId, name, birthDate, relationship, medicalNotes, onSuccess ->
-            viewModel.addDependent(
-                userId = userId,
-                name = name,
-                birthDate = birthDate,
-                relationship = relationship,
-                medicalNotes = medicalNotes,
-                onSuccess = onSuccess,
-            )
+        onLinkStudent = { guardianId, student, onSuccess ->
+            viewModel.linkStudentAsDependent(guardianId, student, onSuccess)
         },
+        onUnlinkDependent = { guardianId, dependentId, dependentName ->
+            viewModel.unlinkDependent(guardianId, dependentId, dependentName)
+        },
+        onLoadStudents = { viewModel.loadAvailableStudents() },
         onDismissError = { viewModel.clearActionError() },
         onDismissFeedback = { viewModel.clearFeedbackMessage() },
         modifier = modifier,
@@ -135,16 +138,13 @@ fun AdminApprovalsContent(
     feedbackMessage: String? = null,
     processingUserIds: Set<String> = emptySet(),
     isAddingDependent: Boolean = false,
+    availableStudents: List<User> = emptyList(),
+    isLoadingStudents: Boolean = false,
     onApprove: (String) -> Unit = {},
     onReject: (String) -> Unit = {},
-    onAddDependent: (
-        userId: String,
-        name: String,
-        birthDate: String,
-        relationship: String,
-        medicalNotes: String,
-        onSuccess: () -> Unit,
-    ) -> Unit = { _, _, _, _, _, _ -> },
+    onLinkStudent: (guardianId: String, student: User, onSuccess: () -> Unit) -> Unit = { _, _, _ -> },
+    onUnlinkDependent: (guardianId: String, dependentId: String, dependentName: String) -> Unit = { _, _, _ -> },
+    onLoadStudents: () -> Unit = {},
     onDismissError: () -> Unit = {},
     onDismissFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -152,6 +152,7 @@ fun AdminApprovalsContent(
     val context = LocalContext.current
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     var targetUserForDependent by remember { mutableStateOf<User?>(null) }
+    var dependentToUnlink by remember { mutableStateOf<Pair<User, Dependent>?>(null) }
 
     LaunchedEffect(feedbackMessage) {
         feedbackMessage?.let { msg ->
@@ -300,7 +301,13 @@ fun AdminApprovalsContent(
                                 isProcessing = processingUserIds.contains(user.id),
                                 onApprove = { onApprove(user.id) },
                                 onReject = { onReject(user.id) },
-                                onOpenAddDependent = { targetUserForDependent = user },
+                                onOpenAddDependent = {
+                                    targetUserForDependent = user
+                                    onLoadStudents()
+                                },
+                                onUnlinkDependent = { dependent ->
+                                    dependentToUnlink = user to dependent
+                                },
                             )
                         }
                     }
@@ -309,21 +316,54 @@ fun AdminApprovalsContent(
         }
     }
 
-    // Modal Bottom Sheet para Cadastrar e Vincular Dependente ao Responsável
+    // Modal Bottom Sheet para Selecionar e Vincular Aluno como Dependente
     targetUserForDependent?.let { responsibleUser ->
-        AddDependentBottomSheet(
-            responsible = responsibleUser,
-            isLoading = isAddingDependent,
+        com.associacaocamila.app.ui.components.SelectStudentBottomSheet(
+            availableStudents = availableStudents,
+            alreadyLinkedIds = (responsibleUser.associatedStudentIds + responsibleUser.dependents.map { it.id }).toSet(),
+            isLoading = isLoadingStudents,
+            isLinking = isAddingDependent,
             onDismiss = { targetUserForDependent = null },
-            onSave = { name, birthDate, relationship, medicalNotes ->
-                onAddDependent(
-                    responsibleUser.id,
-                    name,
-                    birthDate,
-                    relationship,
-                    medicalNotes,
-                ) {
+            onRefreshStudents = onLoadStudents,
+            onStudentSelected = { selectedStudent ->
+                onLinkStudent(responsibleUser.id, selectedStudent) {
                     targetUserForDependent = null
+                }
+            },
+        )
+    }
+
+    // Diálogo de confirmação para desvinculação de dependente
+    dependentToUnlink?.let { (guardian, dependent) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { dependentToUnlink = null },
+            title = {
+                Text(
+                    text = "Desvincular Participante",
+                    fontWeight = FontWeight.Bold,
+                    color = CamilaGreenDark,
+                )
+            },
+            text = {
+                Text(
+                    text = "Deseja realmente desvincular ${dependent.name.ifBlank { "este participante" }} do responsável ${guardian.name}?",
+                    color = CamilaGray,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onUnlinkDependent(guardian.id, dependent.id, dependent.name)
+                        dependentToUnlink = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
+                ) {
+                    Text("Desvincular", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dependentToUnlink = null }) {
+                    Text("Cancelar", color = CamilaGray)
                 }
             },
         )
@@ -381,6 +421,7 @@ private fun AdminUserCard(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onOpenAddDependent: () -> Unit,
+    onUnlinkDependent: (Dependent) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -537,7 +578,10 @@ private fun AdminUserCard(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         user.dependents.forEach { dependent ->
-                            DependentItemCard(dependent = dependent)
+                            DependentItemCard(
+                                dependent = dependent,
+                                onUnlink = { onUnlinkDependent(dependent) },
+                            )
                         }
                     }
                 }
@@ -616,6 +660,7 @@ private fun AdminUserCard(
 @Composable
 private fun DependentItemCard(
     dependent: Dependent,
+    onUnlink: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -630,7 +675,10 @@ private fun DependentItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f),
+                ) {
                     Box(
                         modifier = Modifier
                             .size(26.dp)
@@ -653,16 +701,32 @@ private fun DependentItemCard(
                     )
                 }
 
-                Surface(
-                    color = CamilaGreen.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp),
-                ) {
-                    Text(
-                        text = dependent.relationship.ifBlank { "Dependente" },
-                        color = CamilaGreenDark,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = CamilaGreen.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Text(
+                            text = dependent.relationship.ifBlank { "Dependente" },
+                            color = CamilaGreenDark,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+
+                    if (onUnlink != null) {
+                        IconButton(
+                            onClick = onUnlink,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Desvincular",
+                                tint = CamilaOrange,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
                 }
             }
 

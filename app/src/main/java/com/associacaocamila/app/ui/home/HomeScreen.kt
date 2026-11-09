@@ -1244,6 +1244,87 @@ private fun PerfilTabContent(
             canEdit = true,
         )
 
+        // Card Especial para RESPONSÁVEL: Gestão de Dependentes / Participantes Vinculados
+        if (currentUser.role == UserRole.RESPONSAVEL) {
+            var showSelectStudentSheet by rememberSaveable { mutableStateOf(false) }
+            var dependentToUnlink by remember { mutableStateOf<com.associacaocamila.app.data.model.Dependent?>(null) }
+
+            com.associacaocamila.app.ui.components.DependentsSection(
+                dependents = currentUser.dependents,
+                onLinkStudentClick = {
+                    showSelectStudentSheet = true
+                    actualViewModel?.loadAvailableStudents()
+                },
+                onUnlinkDependentClick = { dep ->
+                    dependentToUnlink = dep
+                },
+                canEdit = true,
+            )
+
+            if (showSelectStudentSheet) {
+                com.associacaocamila.app.ui.components.SelectStudentBottomSheet(
+                    availableStudents = uiState.availableStudents,
+                    alreadyLinkedIds = (currentUser.associatedStudentIds + currentUser.dependents.map { it.id }).toSet(),
+                    isLoading = uiState.isLoadingStudents,
+                    isLinking = uiState.isLinkingDependent,
+                    onDismiss = { showSelectStudentSheet = false },
+                    onRefreshStudents = { actualViewModel?.loadAvailableStudents() },
+                    onStudentSelected = { selectedStudent ->
+                        actualViewModel?.linkStudentAsDependent(
+                            guardian = currentUser,
+                            student = selectedStudent,
+                            onSuccess = { updatedGuardian ->
+                                onUserUpdated(updatedGuardian)
+                                showSelectStudentSheet = false
+                            },
+                        )
+                    },
+                )
+            }
+
+            dependentToUnlink?.let { dep ->
+                AlertDialog(
+                    onDismissRequest = { dependentToUnlink = null },
+                    title = {
+                        Text(
+                            text = "Desvincular Participante",
+                            fontWeight = FontWeight.Bold,
+                            color = CamilaGreenDark,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Deseja realmente desvincular ${dep.name.ifBlank { "este participante" }} da sua conta de responsável?",
+                            color = CamilaGray,
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                actualViewModel?.unlinkDependent(
+                                    guardian = currentUser,
+                                    dependentId = dep.id,
+                                    dependentName = dep.name,
+                                    onSuccess = { updatedGuardian ->
+                                        onUserUpdated(updatedGuardian)
+                                        dependentToUnlink = null
+                                    },
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
+                        ) {
+                            Text("Desvincular", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { dependentToUnlink = null }) {
+                            Text("Cancelar", color = CamilaGray)
+                        }
+                    },
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         // Botão Sair da Conta
