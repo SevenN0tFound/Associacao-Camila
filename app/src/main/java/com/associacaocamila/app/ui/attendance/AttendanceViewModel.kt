@@ -25,6 +25,7 @@ data class AttendanceUiState(
     val participants: List<EligibleParticipant> = emptyList(),
     val attendanceMap: Map<String, Boolean> = emptyMap(),
     val isSubmitting: Boolean = false,
+    val isExportingPdf: Boolean = false,
     val userMessage: String? = null,
     val errorMessage: String? = null,
 )
@@ -177,6 +178,50 @@ class AttendanceViewModel(
                             isSubmitting = false,
                             errorMessage = error.localizedMessage
                                 ?: "Erro ao salvar a lista de presença. Tente novamente."
+                        )
+                    }
+                }
+        }
+    }
+
+    fun exportAttendancePdf(
+        context: android.content.Context,
+        teacherName: String = "Professor(a)",
+    ) {
+        val workshop = _uiState.value.selectedWorkshop ?: run {
+            _uiState.update { it.copy(errorMessage = "Selecione uma oficina para exportar o relatório.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExportingPdf = true, errorMessage = null) }
+            repository.getAttendanceRecordsForWorkshop(workshop.id)
+                .onSuccess { records ->
+                    runCatching {
+                        val studentsMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
+                        val file = com.associacaocamila.app.util.WorkshopReportPdfGenerator.generateAttendancePdf(
+                            context = context,
+                            workshop = workshop,
+                            records = records,
+                            studentsMap = studentsMap,
+                            teacherName = teacherName,
+                        )
+                        _uiState.update { it.copy(isExportingPdf = false) }
+                        com.associacaocamila.app.util.WorkshopReportPdfGenerator.sharePdf(context, file)
+                    }.onFailure { ex ->
+                        _uiState.update {
+                            it.copy(
+                                isExportingPdf = false,
+                                errorMessage = "Erro ao gerar PDF: ${ex.localizedMessage}",
+                            )
+                        }
+                    }
+                }
+                .onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            isExportingPdf = false,
+                            errorMessage = err.localizedMessage ?: "Erro ao buscar histórico de chamadas.",
                         )
                     }
                 }

@@ -18,6 +18,7 @@ interface AttendanceRepository {
     suspend fun getStudentsForWorkshop(studentIds: List<String>): Result<List<User>>
     suspend fun getParticipantsForWorkshop(participantIds: List<String>): Result<List<EligibleParticipant>>
     suspend fun saveAttendanceRecord(record: AttendanceRecord): Result<Unit>
+    suspend fun getAttendanceRecordsForWorkshop(workshopId: String): Result<List<AttendanceRecord>>
 }
 
 class AttendanceRepositoryImpl(
@@ -132,6 +133,18 @@ class AttendanceRepositoryImpl(
             }
             val recordToSave = if (record.id.isBlank()) record.copy(id = docRef.id) else record
             docRef.set(recordToSave).await()
+        }
+
+    override suspend fun getAttendanceRecordsForWorkshop(workshopId: String): Result<List<AttendanceRecord>> =
+        runCatching {
+            attendancesCollection
+                .whereEqualTo("workshopId", workshopId)
+                .get()
+                .await()
+                .documents
+                .mapNotNull { doc ->
+                    doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                }
         }
 
     private companion object {

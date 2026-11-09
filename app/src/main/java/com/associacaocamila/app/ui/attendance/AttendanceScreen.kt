@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Button
@@ -88,6 +89,7 @@ fun AttendanceScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(teacherId) {
         viewModel.loadWorkshops(teacherId)
@@ -114,6 +116,7 @@ fun AttendanceScreen(
             onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
             onSubmitAttendance = { viewModel.submitAttendance(teacherId) },
+            onExportPdf = { viewModel.exportAttendancePdf(context) },
         )
 
         SnackbarHost(
@@ -132,6 +135,7 @@ fun AttendanceContent(
     onSetAttendance: (String, Boolean) -> Unit,
     onMarkAll: (Boolean) -> Unit,
     onSubmitAttendance: () -> Unit,
+    onExportPdf: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (uiState.isLoadingWorkshops) {
@@ -268,31 +272,74 @@ fun AttendanceContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Botão Salvar Lista de Presença
-        Button(
-            onClick = onSubmitAttendance,
-            enabled = !uiState.isSubmitting && uiState.participants.isNotEmpty(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = CamilaGreen,
-                disabledContainerColor = CamilaGreen.copy(alpha = 0.5f)
-            )
+        // Botões de Ação: Exportar Relatório em PDF e Salvar Lista de Presença
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (uiState.isSubmitting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Text(
-                    text = "Salvar Lista de Presença",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
+            // Botão Exportar Frequência (PDF)
+            androidx.compose.material3.OutlinedButton(
+                onClick = onExportPdf,
+                enabled = !uiState.isExportingPdf && uiState.selectedWorkshop != null,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CamilaGreen),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = CamilaGreenDark,
+                ),
+            ) {
+                if (uiState.isExportingPdf) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = CamilaGreen,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PictureAsPdf,
+                        contentDescription = "Exportar Frequência em PDF",
+                        tint = CamilaGreenDark,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "PDF",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = CamilaGreenDark,
+                    )
+                }
+            }
+
+            // Botão Salvar Lista de Presença
+            Button(
+                onClick = onSubmitAttendance,
+                enabled = !uiState.isSubmitting && uiState.participants.isNotEmpty(),
+                modifier = Modifier
+                    .weight(2.2f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CamilaGreen,
+                    disabledContainerColor = CamilaGreen.copy(alpha = 0.5f),
+                ),
+            ) {
+                if (uiState.isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(
+                        text = "Salvar Lista de Presença",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                }
             }
         }
     }
