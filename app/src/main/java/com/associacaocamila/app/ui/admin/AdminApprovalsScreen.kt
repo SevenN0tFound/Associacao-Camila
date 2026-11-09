@@ -237,7 +237,7 @@ fun AdminApprovalsContent(
             }
 
             is AdminApprovalsUiState.Success -> {
-                // Abas de navegação: Pendentes e Aprovados
+                // Abas de navegação: Pendentes, Aprovados e Justificativas de Falta
                 PrimaryTabRow(
                     selectedTabIndex = selectedTabIndex,
                     containerColor = Color.White,
@@ -263,13 +263,26 @@ fun AdminApprovalsContent(
                             )
                         },
                     )
+                    Tab(
+                        selected = selectedTabIndex == 2,
+                        onClick = { selectedTabIndex = 2 },
+                        text = {
+                            Text(
+                                text = "Justificativas",
+                                fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        },
+                    )
                 }
 
-                val currentList = if (selectedTabIndex == 0) {
-                    uiState.pendingUsers
+                if (selectedTabIndex == 2) {
+                    JustificationsApprovalScreen(modifier = Modifier.fillMaxSize())
                 } else {
-                    uiState.approvedUsers
-                }
+                    val currentList = if (selectedTabIndex == 0) {
+                        uiState.pendingUsers
+                    } else {
+                        uiState.approvedUsers
+                    }
 
                 if (currentList.isEmpty()) {
                     EmptyApprovalsState(
@@ -311,6 +324,7 @@ fun AdminApprovalsContent(
                             )
                         }
                     }
+                }
                 }
             }
         }

@@ -1,13 +1,17 @@
 package com.associacaocamila.app.ui.attendance
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.associacaocamila.app.data.model.AttendanceRecord
+import com.associacaocamila.app.data.model.AttendanceStatus
 import com.associacaocamila.app.data.model.EligibleParticipant
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.data.repository.AttendanceRepository
 import com.associacaocamila.app.data.repository.AttendanceRepositoryImpl
+import com.associacaocamila.app.util.NotificationHelper
+import com.associacaocamila.app.util.WorkshopReportPdfGenerator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 data class AttendanceUiState(
     val isLoadingWorkshops: Boolean = true,
@@ -24,6 +29,12 @@ data class AttendanceUiState(
     val students: List<User> = emptyList(),
     val participants: List<EligibleParticipant> = emptyList(),
     val attendanceMap: Map<String, Boolean> = emptyMap(),
+    val statusMap: Map<String, AttendanceStatus> = emptyMap(),
+    val selectedDateMillis: Long = System.currentTimeMillis(),
+    val isReadOnly: Boolean = false,
+    val isDateHasRecord: Boolean = false,
+    val currentRecord: AttendanceRecord? = null,
+    val workshopRecords: List<AttendanceRecord> = emptyList(),
     val isSubmitting: Boolean = false,
     val isExportingPdf: Boolean = false,
     val userMessage: String? = null,
@@ -58,7 +69,6 @@ class AttendanceViewModel(
                 .collect { workshops ->
                     _uiState.update { current ->
                         val currentSelected = current.selectedWorkshop
-                        // Mantém a oficina selecionada se ela ainda existir na lista, ou seleciona a primeira
                         val selected = workshops.firstOrNull { it.id == currentSelected?.id }
                             ?: workshops.firstOrNull()
 
@@ -69,7 +79,7 @@ class AttendanceViewModel(
                         )
                     }
 
-                    _uiState.value.selectedWorkshop?.let { loadStudents(it) }
+                    _uiState.value.selectedWorkshop?.let { loadStudentsAndRecords(it) }
                 }
         }
     }
@@ -77,10 +87,10 @@ class AttendanceViewModel(
     fun selectWorkshop(workshop: Workshop) {
         if (_uiState.value.selectedWorkshop?.id == workshop.id) return
         _uiState.update { it.copy(selectedWorkshop = workshop) }
-        loadStudents(workshop)
+        loadStudentsAndRecords(workshop)
     }
 
-    private fun loadStudents(workshop: Workshop) {
+    private fun loadStudentsAndRecords(workshop: Workshop) {
         studentsJob?.cancel()
         studentsJob = viewModelScope.launch {
             _uiState.update {
@@ -89,6 +99,7 @@ class AttendanceViewModel(
                     students = emptyList(),
                     participants = emptyList(),
                     attendanceMap = emptyMap(),
+                    statusMap = emptyMap(),
                     errorMessage = null
                 )
             }
@@ -98,59 +109,177 @@ class AttendanceViewModel(
                 return@launch
             }
 
-            repository.getParticipantsForWorkshop(workshop.enrolledStudentIds)
-                .onSuccess { participants ->
-                    // Por padrão institucional, todos os participantes iniciam com presença marcada (true)
-                    val defaultAttendance = participants.associateBy({ it.id }, { true })
-                    _uiState.update {
-                        it.copy(
-                            isLoadingStudents = false,
-                            participants = participants,
-                            attendanceMap = defaultAttendance
-                        )
-                    }
+            // 1. Carrega participantes matriculados
+            val participantsResult = repository.getParticipantsForWorkshop(workshop.enrolledStudentIds)
+            val participants = participantsResult.getOrElse { error ->
+                _uiState.update {
+                    it.copy(
+                        isLoadingStudents = false,
+                        errorMessage = error.localizedMessage ?: "Erro ao carregar os participantes matriculados."
+                    )
                 }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            isLoadingStudents = false,
-                            errorMessage = error.localizedMessage
-                                ?: "Erro ao carregar os participantes matriculados."
-                        )
-                    }
-                }
+                return@launch
+            }
+
+            // 2. Carrega histórico de chamadas da oficina
+            val recordsResult = repository.getAttendanceRecordsForWorkshop(workshop.id)
+            val records = recordsResult.getOrDefault(emptyList())
+
+            _uiState.update {
+                it.copy(
+                    isLoadingStudents = false,
+                    participants = participants,
+                    workshopRecords = records
+                )
+            }
+
+            syncAttendanceForSelectedDate()
         }
     }
 
-    fun toggleStudentAttendance(studentId: String) {
-        _uiState.update { state ->
-            val currentStatus = state.attendanceMap[studentId] ?: true
-            state.copy(
-                attendanceMap = state.attendanceMap + (studentId to !currentStatus)
-            )
+    fun previousDay() {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = _uiState.value.selectedDateMillis
+            add(Calendar.DAY_OF_YEAR, -1)
+        }
+        selectDate(cal.timeInMillis)
+    }
+
+    fun nextDay() {
+        val currentMillis = _uiState.value.selectedDateMillis
+        val now = Calendar.getInstance()
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = currentMillis
+            add(Calendar.DAY_OF_YEAR, 1)
+        }
+        // Não permite avançar para dias futuros
+        if (cal.after(now) && !isSameDay(cal.timeInMillis, now.timeInMillis)) {
+            return
+        }
+        selectDate(cal.timeInMillis)
+    }
+
+    fun selectDate(dateMillis: Long) {
+        _uiState.update { it.copy(selectedDateMillis = dateMillis) }
+        syncAttendanceForSelectedDate()
+    }
+
+    fun isToday(millis: Long): Boolean = isSameDay(millis, System.currentTimeMillis())
+
+    private fun isSameDay(time1: Long, time2: Long): Boolean {
+        val c1 = Calendar.getInstance().apply { timeInMillis = time1 }
+        val c2 = Calendar.getInstance().apply { timeInMillis = time2 }
+        return c1.get(Calendar.ERA) == c2.get(Calendar.ERA) &&
+                c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
+                c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun syncAttendanceForSelectedDate() {
+        val state = _uiState.value
+        val dateMillis = state.selectedDateMillis
+        val isTodayDate = isToday(dateMillis)
+        val records = state.workshopRecords
+        val matchingRecord = records.firstOrNull { isSameDay(it.dateMillis, dateMillis) }
+
+        if (isTodayDate) {
+            if (matchingRecord != null) {
+                val statusMap = state.participants.associate { p ->
+                    p.id to matchingRecord.getParticipantStatus(p.id)
+                }
+                val attendanceMap = state.participants.associate { p ->
+                    p.id to (matchingRecord.attendanceMap[p.id] ?: (statusMap[p.id] == AttendanceStatus.PRESENTE))
+                }
+                _uiState.update {
+                    it.copy(
+                        isReadOnly = false,
+                        isDateHasRecord = true,
+                        currentRecord = matchingRecord,
+                        attendanceMap = attendanceMap,
+                        statusMap = statusMap
+                    )
+                }
+            } else {
+                val defaultAttendance = state.participants.associate { it.id to true }
+                val defaultStatuses = state.participants.associate { it.id to AttendanceStatus.PRESENTE }
+                _uiState.update {
+                    it.copy(
+                        isReadOnly = false,
+                        isDateHasRecord = false,
+                        currentRecord = null,
+                        attendanceMap = defaultAttendance,
+                        statusMap = defaultStatuses
+                    )
+                }
+            }
+        } else {
+            // Data anterior: MODO READ-ONLY (Trava de edição)
+            if (matchingRecord != null) {
+                val statusMap = state.participants.associate { p ->
+                    p.id to matchingRecord.getParticipantStatus(p.id)
+                }
+                val attendanceMap = state.participants.associate { p ->
+                    p.id to (matchingRecord.attendanceMap[p.id] ?: (statusMap[p.id] == AttendanceStatus.PRESENTE))
+                }
+                _uiState.update {
+                    it.copy(
+                        isReadOnly = true,
+                        isDateHasRecord = true,
+                        currentRecord = matchingRecord,
+                        attendanceMap = attendanceMap,
+                        statusMap = statusMap
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isReadOnly = true,
+                        isDateHasRecord = false,
+                        currentRecord = null,
+                        attendanceMap = emptyMap(),
+                        statusMap = emptyMap()
+                    )
+                }
+            }
         }
     }
 
     fun setStudentAttendance(studentId: String, isPresent: Boolean) {
+        if (_uiState.value.isReadOnly) return
         _uiState.update { state ->
+            val newStatus = if (isPresent) AttendanceStatus.PRESENTE else AttendanceStatus.FALTA
             state.copy(
-                attendanceMap = state.attendanceMap + (studentId to isPresent)
+                attendanceMap = state.attendanceMap + (studentId to isPresent),
+                statusMap = state.statusMap + (studentId to newStatus)
             )
         }
     }
 
+    fun toggleStudentAttendance(studentId: String) {
+        if (_uiState.value.isReadOnly) return
+        val currentStatus = _uiState.value.attendanceMap[studentId] ?: true
+        setStudentAttendance(studentId, !currentStatus)
+    }
+
     fun markAll(present: Boolean) {
+        if (_uiState.value.isReadOnly) return
         _uiState.update { state ->
             val updatedMap = state.participants.associate { it.id to present }
-            state.copy(attendanceMap = updatedMap)
+            val newStatus = if (present) AttendanceStatus.PRESENTE else AttendanceStatus.FALTA
+            val updatedStatusMap = state.participants.associate { it.id to newStatus }
+            state.copy(attendanceMap = updatedMap, statusMap = updatedStatusMap)
         }
     }
 
     fun submitAttendance(
         teacherId: String,
-        context: android.content.Context? = null,
+        context: Context? = null,
         onFinished: () -> Unit = {},
     ) {
+        if (_uiState.value.isReadOnly) {
+            _uiState.update { it.copy(errorMessage = "Registros de datas anteriores são somente para leitura.") }
+            return
+        }
+
         val currentWorkshop = _uiState.value.selectedWorkshop ?: run {
             _uiState.update { it.copy(errorMessage = "Nenhuma oficina selecionada.") }
             return
@@ -159,18 +288,37 @@ class AttendanceViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, errorMessage = null, userMessage = null) }
 
+            val recordId = _uiState.value.currentRecord?.id?.ifBlank { "" } ?: ""
+            val currentStatuses = _uiState.value.statusMap
+            val statusMapToSave = _uiState.value.attendanceMap.mapValues { (id, isPresent) ->
+                val existing = currentStatuses[id]
+                if (existing == AttendanceStatus.JUSTIFICADO) {
+                    AttendanceStatus.JUSTIFICADO.name
+                } else if (isPresent) {
+                    AttendanceStatus.PRESENTE.name
+                } else {
+                    AttendanceStatus.FALTA.name
+                }
+            }
+
             val record = AttendanceRecord(
+                id = recordId,
                 workshopId = currentWorkshop.id,
-                dateMillis = System.currentTimeMillis(),
+                dateMillis = _uiState.value.selectedDateMillis,
                 teacherId = teacherId,
-                attendanceMap = _uiState.value.attendanceMap
+                attendanceMap = _uiState.value.attendanceMap,
+                statusMap = statusMapToSave
             )
 
             repository.saveAttendanceRecord(record)
                 .onSuccess {
+                    val updatedRecords = _uiState.value.workshopRecords.filter { it.id != record.id } + record
                     _uiState.update {
                         it.copy(
                             isSubmitting = false,
+                            currentRecord = record,
+                            isDateHasRecord = true,
+                            workshopRecords = updatedRecords,
                             userMessage = "Lista de presença salva com sucesso!"
                         )
                     }
@@ -182,7 +330,7 @@ class AttendanceViewModel(
 
                         absentIds.forEach { absentId ->
                             val studentName = participantMap[absentId] ?: "Participante"
-                            com.associacaocamila.app.util.NotificationHelper.sendAbsenceAlert(
+                            NotificationHelper.sendAbsenceAlert(
                                 context = context,
                                 studentName = studentName,
                                 workshopName = currentWorkshop.name,
@@ -205,7 +353,7 @@ class AttendanceViewModel(
     }
 
     fun exportAttendancePdf(
-        context: android.content.Context,
+        context: Context,
         teacherName: String = "Professor(a)",
     ) {
         val workshop = _uiState.value.selectedWorkshop ?: run {
@@ -219,7 +367,7 @@ class AttendanceViewModel(
                 .onSuccess { records ->
                     runCatching {
                         val studentsMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
-                        val file = com.associacaocamila.app.util.WorkshopReportPdfGenerator.generateAttendancePdf(
+                        val file = WorkshopReportPdfGenerator.generateAttendancePdf(
                             context = context,
                             workshop = workshop,
                             records = records,
@@ -227,7 +375,7 @@ class AttendanceViewModel(
                             teacherName = teacherName,
                         )
                         _uiState.update { it.copy(isExportingPdf = false) }
-                        com.associacaocamila.app.util.WorkshopReportPdfGenerator.sharePdf(context, file)
+                        WorkshopReportPdfGenerator.sharePdf(context, file)
                     }.onFailure { ex ->
                         _uiState.update {
                             it.copy(
