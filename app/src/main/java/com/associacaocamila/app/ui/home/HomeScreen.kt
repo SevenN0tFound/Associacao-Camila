@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarToday
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -51,7 +55,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +77,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -95,6 +104,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.associacaocamila.app.data.model.Announcement
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
@@ -390,7 +400,10 @@ fun HomeScreen(
                 label = "home_tab_animation"
             ) { navItem ->
                 when (navItem) {
-                    is NavigationItem.Inicio -> InicioTabContent(currentUser = userState)
+                    is NavigationItem.Inicio -> InicioTabContent(
+                        currentUser = userState,
+                        snackbarHostState = snackbarHostState
+                    )
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
                     is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
@@ -415,7 +428,61 @@ fun HomeScreen(
 private fun InicioTabContent(
     currentUser: User,
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState? = null,
+    homeViewModel: HomeViewModel? = null,
 ) {
+    val isInspectionMode = LocalInspectionMode.current
+    val actualViewModel = if (isInspectionMode) null else (homeViewModel ?: viewModel())
+    val uiState = actualViewModel?.uiState?.collectAsState()?.value ?: HomeUiState(
+        isLoadingAnnouncements = false,
+        announcements = listOf(
+            Announcement(
+                id = "1",
+                title = "Oficina de Fortalecimento",
+                message = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
+                category = "Oficinas",
+                authorName = "Coordenação"
+            ),
+            Announcement(
+                id = "2",
+                title = "Projeto Mídias Force",
+                message = "Capacitação prática em comunicação, audiovisual e produção de conteúdo digital.",
+                category = "Oficinas",
+                authorName = "Coordenação"
+            ),
+            Announcement(
+                id = "3",
+                title = "Acolhimento e Assistência Social",
+                message = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipe técnica.",
+                category = "Acolhimento",
+                authorName = "Serviço Social"
+            )
+        )
+    )
+    val context = LocalContext.current
+
+    var showCreateSheet by rememberSaveable { mutableStateOf(false) }
+    var announcementToDelete by remember { mutableStateOf<Announcement?>(null) }
+
+    LaunchedEffect(uiState.userMessage, uiState.errorMessage) {
+        uiState.userMessage?.let { msg ->
+            if (snackbarHostState != null) {
+                snackbarHostState.showSnackbar(msg)
+            } else {
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+            actualViewModel?.clearMessages()
+        }
+        uiState.errorMessage?.let { err ->
+            if (snackbarHostState != null) {
+                snackbarHostState.showSnackbar(err)
+            } else {
+                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+            }
+            actualViewModel?.clearMessages()
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -491,92 +558,459 @@ private fun InicioTabContent(
             }
         }
 
-        // Seção com avisos e oficinas recentes
+        // Seção com título e botão de ação se for ADMIN
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Campaign,
-                contentDescription = null,
-                tint = CamilaOrange
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Avisos e Oficinas em Destaque",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                color = CamilaGreenDark
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Campaign,
+                    contentDescription = null,
+                    tint = CamilaOrange
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Avisos e Comunicados",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = CamilaGreenDark
+                )
+            }
+
+            if (currentUser.role == UserRole.ADMIN) {
+                Button(
+                    onClick = { showCreateSheet = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Novo Comunicado",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Novo Comunicado",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
         }
 
-        NoticeCard(
-            title = "Oficina de Fortalecimento",
-            description = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
-            badgeColor = CamilaOrange
-        )
+        // Lista dinâmica ou estados de loading/vazio
+        if (uiState.isLoadingAnnouncements) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = CamilaGreen,
+                    strokeWidth = 3.dp
+                )
+            }
+        } else if (uiState.announcements.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = CamilaGray,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Nenhum comunicado no momento",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        color = CamilaGray
+                    )
+                }
+            }
+        } else {
+            uiState.announcements.forEach { announcement ->
+                AnnouncementCard(
+                    announcement = announcement,
+                    isAdmin = currentUser.role == UserRole.ADMIN,
+                    onDeleteClick = { announcementToDelete = announcement }
+                )
+            }
+        }
+    }
 
-        NoticeCard(
-            title = "Projeto Mídias Force",
-            description = "Capacitação prática em comunicação, audiovisual e produção de conteúdo digital.",
-            badgeColor = CamilaBlue
+    // BottomSheet para criação de novo comunicado (Exclusivo ADMIN)
+    if (showCreateSheet) {
+        CreateAnnouncementBottomSheet(
+            isPosting = uiState.isPostingAnnouncement,
+            authorName = currentUser.name.ifBlank { "Coordenação" },
+            onDismiss = { showCreateSheet = false },
+            onPost = { title, message, category ->
+                actualViewModel?.createAnnouncement(
+                    title = title,
+                    message = message,
+                    category = category,
+                    authorName = currentUser.name.ifBlank { "Coordenação" },
+                    onSuccess = { showCreateSheet = false }
+                )
+            }
         )
+    }
 
-        NoticeCard(
-            title = "Acolhimento e Assistência Social",
-            description = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipa técnica.",
-            badgeColor = CamilaGreenDark
+    // Diálogo de confirmação para exclusão de comunicado (Exclusivo ADMIN)
+    announcementToDelete?.let { announcement ->
+        AlertDialog(
+            onDismissRequest = { announcementToDelete = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Remover Comunicado",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Deseja realmente apagar o aviso \"${announcement.title}\"? Ele não será mais visível no feed de notícias dos usuários.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CamilaGray,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        actualViewModel?.removeAnnouncement(announcement.id)
+                        announcementToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange)
+                ) {
+                    Text("Excluir", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { announcementToDelete = null }) {
+                    Text("Cancelar", color = CamilaGray)
+                }
+            },
+            shape = RoundedCornerShape(16.dp)
         )
     }
 }
 
 @Composable
-private fun NoticeCard(
-    title: String,
-    description: String,
-    badgeColor: Color,
+private fun AnnouncementCard(
+    announcement: Announcement,
+    isAdmin: Boolean,
+    onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val categoryBadgeColor = when (announcement.category.lowercase()) {
+        "oficinas" -> CamilaGreen
+        "reunião", "reuniao" -> CamilaBlue
+        "acolhimento" -> CamilaOrange
+        else -> CamilaGreenDark // Geral
+    }
+
+    val formattedDate = remember(announcement.timestamp) {
+        if (announcement.timestamp > 0) {
+            java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.forLanguageTag("pt-BR"))
+                .format(java.util.Date(announcement.timestamp))
+        } else {
+            ""
+        }
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(badgeColor)
-                    .align(Alignment.CenterVertically)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Badge de Categoria
+                Surface(
+                    color = categoryBadgeColor.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = announcement.category.uppercase(),
+                        color = categoryBadgeColor,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (formattedDate.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = CamilaGray,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = formattedDate,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CamilaGray
+                            )
+                        }
+                    }
+
+                    if (isAdmin) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remover comunicado",
+                                tint = CamilaOrange,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Título
+            Text(
+                text = announcement.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Mensagem completa
+            Text(
+                text = announcement.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 20.sp
+            )
+
+            if (announcement.authorName.isNotBlank() && announcement.authorName != "Coordenação") {
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CamilaGray,
-                    lineHeight = 18.sp
+                    text = "Publicado por: ${announcement.authorName}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CamilaGray
                 )
             }
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateAnnouncementBottomSheet(
+    isPosting: Boolean,
+    authorName: String,
+    onDismiss: () -> Unit,
+    onPost: (String, String, String) -> Unit,
+) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("Geral") }
+    var categoryDropdownExpanded by remember { mutableStateOf(false) }
+
+    val categories = listOf("Geral", "Oficinas", "Reunião", "Acolhimento")
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Novo Comunicado",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark
+                    )
+                    Text(
+                        text = "Publicando como: $authorName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CamilaGray
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Fechar")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Campo de Título
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Título do Comunicado") },
+                placeholder = { Text("Ex: Início das Matrículas para Novas Oficinas") },
+                singleLine = true,
+                colors = outlinedFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Dropdown de Categoria
+            Text(
+                text = "Categoria",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            ExposedDropdownMenuBox(
+                expanded = categoryDropdownExpanded,
+                onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded)
+                    },
+                    colors = outlinedFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth()
+                )
+
+                ExposedDropdownMenu(
+                    expanded = categoryDropdownExpanded,
+                    onDismissRequest = { categoryDropdownExpanded = false }
+                ) {
+                    categories.forEach { cat ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = cat,
+                                    fontWeight = if (cat == category) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (cat == category) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            onClick = {
+                                category = cat
+                                categoryDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Campo de Mensagem
+            OutlinedTextField(
+                value = message,
+                onValueChange = { message = it },
+                label = { Text("Mensagem") },
+                placeholder = { Text("Escreva as informações detalhadas para a comunidade...") },
+                minLines = 3,
+                maxLines = 6,
+                colors = outlinedFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Botão Publicar Comunicado
+            Button(
+                onClick = { onPost(title, message, category) },
+                enabled = !isPosting && title.isNotBlank() && message.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CamilaGreen,
+                    disabledContainerColor = CamilaGreen.copy(alpha = 0.5f)
+                )
+            ) {
+                if (isPosting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Publicar Comunicado",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+        }
+    }
+}
+
+@Composable
+private fun outlinedFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = CamilaGreen,
+    unfocusedBorderColor = CamilaGray.copy(alpha = 0.4f),
+    focusedLabelColor = CamilaGreen,
+    cursorColor = CamilaGreen
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

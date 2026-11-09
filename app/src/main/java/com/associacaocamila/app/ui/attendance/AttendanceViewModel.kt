@@ -130,6 +130,14 @@ class AttendanceViewModel(
         }
     }
 
+    fun setStudentAttendance(studentId: String, isPresent: Boolean) {
+        _uiState.update { state ->
+            state.copy(
+                attendanceMap = state.attendanceMap + (studentId to isPresent)
+            )
+        }
+    }
+
     fun markAll(present: Boolean) {
         _uiState.update { state ->
             val updatedMap = state.participants.associate { it.id to present }

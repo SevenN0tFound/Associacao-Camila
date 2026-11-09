@@ -1,9 +1,11 @@
 package com.associacaocamila.app.ui.attendance
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,15 +43,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -111,7 +111,7 @@ fun AttendanceScreen(
         AttendanceContent(
             uiState = uiState,
             onSelectWorkshop = { viewModel.selectWorkshop(it) },
-            onToggleAttendance = { viewModel.toggleStudentAttendance(it) },
+            onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
             onSubmitAttendance = { viewModel.submitAttendance(teacherId) },
         )
@@ -129,7 +129,7 @@ fun AttendanceScreen(
 fun AttendanceContent(
     uiState: AttendanceUiState,
     onSelectWorkshop: (Workshop) -> Unit,
-    onToggleAttendance: (String) -> Unit,
+    onSetAttendance: (String, Boolean) -> Unit,
     onMarkAll: (Boolean) -> Unit,
     onSubmitAttendance: () -> Unit,
     modifier: Modifier = Modifier,
@@ -259,7 +259,8 @@ fun AttendanceContent(
                     ParticipantAttendanceItem(
                         participant = participant,
                         isPresent = isPresent,
-                        onToggle = { onToggleAttendance(participant.id) }
+                        onSelectPresent = { onSetAttendance(participant.id, true) },
+                        onSelectAbsent = { onSetAttendance(participant.id, false) }
                     )
                 }
             }
@@ -472,12 +473,13 @@ private fun AttendanceHeaderCard(
 private fun ParticipantAttendanceItem(
     participant: EligibleParticipant,
     isPresent: Boolean,
-    onToggle: () -> Unit,
+    onSelectPresent: () -> Unit,
+    onSelectAbsent: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -489,7 +491,7 @@ private fun ParticipantAttendanceItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
                     .background(
                         if (isPresent) CamilaGreen.copy(alpha = 0.12f)
@@ -511,27 +513,35 @@ private fun ParticipantAttendanceItem(
                 Text(
                     text = participant.name,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
                 )
 
                 if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Face,
                             contentDescription = null,
                             tint = CamilaOrange,
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(12.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Dependente de ${participant.responsibleName}",
+                            text = "Dep. de ${participant.responsibleName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = CamilaOrange,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
                         )
                     }
                 } else if (!participant.email.isNullOrBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Email,
                             contentDescription = null,
@@ -542,7 +552,8 @@ private fun ParticipantAttendanceItem(
                         Text(
                             text = participant.email,
                             style = MaterialTheme.typography.bodySmall,
-                            color = CamilaGray
+                            color = CamilaGray,
+                            maxLines = 1
                         )
                     }
                 } else {
@@ -556,33 +567,109 @@ private fun ParticipantAttendanceItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Botão / FilterChip estilizado de alternância
-            FilterChip(
-                selected = isPresent,
-                onClick = onToggle,
-                label = {
-                    Text(
-                        text = if (isPresent) "Presente" else "Falta",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = if (isPresent) Icons.Default.Check else Icons.Default.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = CamilaGreen,
-                    selectedLabelColor = Color.White,
-                    selectedLeadingIconColor = Color.White,
-                    containerColor = CamilaOrange.copy(alpha = 0.15f),
-                    labelColor = CamilaOrange,
-                    iconColor = CamilaOrange
-                ),
-                shape = RoundedCornerShape(8.dp)
+            // Seletor Segmentado de Presença / Falta Moderno
+            AttendanceSegmentedControl(
+                isPresent = isPresent,
+                onSelectPresent = onSelectPresent,
+                onSelectAbsent = onSelectAbsent
             )
+        }
+    }
+}
+
+@Composable
+private fun AttendanceSegmentedControl(
+    isPresent: Boolean,
+    onSelectPresent: () -> Unit,
+    onSelectAbsent: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF1F3F4))
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        // Segmento: Presente
+        val presentBgColor by animateColorAsState(
+            targetValue = if (isPresent) CamilaGreen else Color.Transparent,
+            label = "presentBgColor"
+        )
+        val presentContentColor by animateColorAsState(
+            targetValue = if (isPresent) Color.White else CamilaGray,
+            label = "presentContentColor"
+        )
+
+        Box(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(presentBgColor)
+                .clickable(onClick = onSelectPresent)
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = presentContentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Presente",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (isPresent) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = presentContentColor
+                )
+            }
+        }
+
+        // Segmento: Falta
+        val absentBgColor by animateColorAsState(
+            targetValue = if (!isPresent) CamilaOrange else Color.Transparent,
+            label = "absentBgColor"
+        )
+        val absentContentColor by animateColorAsState(
+            targetValue = if (!isPresent) Color.White else CamilaGray,
+            label = "absentContentColor"
+        )
+
+        Box(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(absentBgColor)
+                .clickable(onClick = onSelectAbsent)
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = absentContentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Falta",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (!isPresent) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = absentContentColor
+                )
+            }
         }
     }
 }
@@ -720,7 +807,7 @@ private fun AttendanceScreenPreview() {
                 attendanceMap = mapOf("1" to true, "2" to false)
             ),
             onSelectWorkshop = {},
-            onToggleAttendance = {},
+            onSetAttendance = { _, _ -> },
             onMarkAll = {},
             onSubmitAttendance = {}
         )
