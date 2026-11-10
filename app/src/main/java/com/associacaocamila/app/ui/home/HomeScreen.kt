@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
@@ -111,6 +112,7 @@ import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
 import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
+import com.associacaocamila.app.ui.help.HelpContactScreen
 import com.associacaocamila.app.ui.profile.ProfileUiState
 import com.associacaocamila.app.ui.profile.ProfileViewModel
 import com.associacaocamila.app.ui.student.StudentAttendanceScreen
@@ -140,6 +142,7 @@ sealed class NavigationItem(
     data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
     data object Turmas : NavigationItem("turmas", "Turmas", Icons.Default.School)
     data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
+    data object Ajuda : NavigationItem("ajuda", "Ajuda & Contato", Icons.AutoMirrored.Filled.HelpOutline)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -184,6 +187,7 @@ fun HomeScreen(
                 }
             }
             add(NavigationItem.Perfil)
+            add(NavigationItem.Ajuda)
         }
     }
 
@@ -411,6 +415,7 @@ fun HomeScreen(
                         onLogout = onLogout,
                         snackbarHostState = snackbarHostState,
                     )
+                    is NavigationItem.Ajuda -> HelpContactScreen()
                 }
             }
         }
