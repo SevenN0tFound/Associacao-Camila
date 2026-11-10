@@ -4,6 +4,7 @@ data class User(
     val id: String = "",
     val name: String = "",
     val email: String = "",
+    val photoUrl: String? = null,
     val role: UserRole = UserRole.ALUNO,
     val status: UserStatus = UserStatus.PENDING, // Todo cadastro entra como pendente até aprovação da ONG
     val associatedStudentIds: List<String> = emptyList(), // Para contas de responsáveis

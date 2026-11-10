@@ -50,6 +50,9 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
     // Task.await() e integração com Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    // Coil para carregamento assíncrono de imagens
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +41,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -113,6 +113,7 @@ import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
 import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
+import com.associacaocamila.app.ui.components.ProfileAvatar
 import com.associacaocamila.app.ui.help.HelpContactScreen
 import com.associacaocamila.app.ui.profile.ProfileUiState
 import com.associacaocamila.app.ui.profile.ProfileViewModel
@@ -237,20 +238,11 @@ fun HomeScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(46.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.White.copy(alpha = 0.2f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(26.dp)
-                                        )
-                                    }
+                                    ProfileAvatar(
+                                        user = userState,
+                                        size = 46.dp,
+                                        isEditable = false
+                                    )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
@@ -290,7 +282,7 @@ fun HomeScreen(
 
                         // Itens de Navegação Dinâmicos por Perfil
                         navItems.forEach { item ->
-                            val isSelected = item.route == currentItem.route
+                            val isSelected = (selectedRoute == item.route)
                             NavigationDrawerItem(
                                 icon = {
                                     Icon(
@@ -310,14 +302,15 @@ fun HomeScreen(
                                     scope.launch { drawerState.close() }
                                 },
                                 colors = NavigationDrawerItemDefaults.colors(
-                                    selectedContainerColor = CamilaGreen.copy(alpha = 0.15f),
-                                    selectedIconColor = CamilaGreenDark,
-                                    selectedTextColor = CamilaGreenDark,
+                                    selectedContainerColor = CamilaGreen.copy(alpha = 0.12f),
+                                    unselectedContainerColor = Color.Transparent,
+                                    selectedIconColor = CamilaGreen,
                                     unselectedIconColor = CamilaGray,
-                                    unselectedTextColor = CamilaGray
+                                    selectedTextColor = CamilaGreen,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurface
                                 ),
                                 shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -406,7 +399,11 @@ fun HomeScreen(
                 when (navItem) {
                     is NavigationItem.Inicio -> InicioTabContent(
                         currentUser = userState,
-                        snackbarHostState = snackbarHostState
+                        snackbarHostState = snackbarHostState,
+                        onUserUpdated = { updated ->
+                            userState = updated
+                            onUserUpdated?.invoke(updated)
+                        }
                     )
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
@@ -439,7 +436,9 @@ private fun InicioTabContent(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState? = null,
     homeViewModel: HomeViewModel? = null,
+    onUserUpdated: ((User) -> Unit)? = null,
 ) {
+    val scope = rememberCoroutineScope()
     val isInspectionMode = LocalInspectionMode.current
     val actualViewModel = if (isInspectionMode) null else (homeViewModel ?: viewModel())
     val uiState = actualViewModel?.uiState?.collectAsState()?.value ?: HomeUiState(
@@ -499,48 +498,62 @@ private fun InicioTabContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Card de Boas-vindas personalizado
+        val firstName = remember(currentUser.name) {
+            currentUser.name.trim().split("\\s+".toRegex()).firstOrNull()?.ifBlank { "Membro" } ?: "Membro"
+        }
+
+        // Card de Boas-vindas personalizado com tema claro moderno
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = CamilaGreen
-            )
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            border = BorderStroke(1.dp, CamilaGray.copy(alpha = 0.15f))
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
+                ProfileAvatar(
+                    user = currentUser,
+                    size = 56.dp,
+                    isEditable = true,
+                    onUserUpdated = onUserUpdated,
+                    onError = { errorMsg ->
+                        scope.launch {
+                            if (snackbarHostState != null) {
+                                snackbarHostState.showSnackbar(errorMsg)
+                            } else {
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        text = "Olá, $firstName!",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = CamilaGreen.copy(alpha = 0.12f)
+                    ) {
                         Text(
-                            text = "Olá, ${currentUser.name.ifBlank { "Membro" }}!",
-                            style = MaterialTheme.typography.titleLarge.copy(
+                            text = currentUser.role.toDisplayName(),
+                            style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold
                             ),
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Perfil: ${currentUser.role.toDisplayName()}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.9f)
+                            color = CamilaGreen,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -1044,21 +1057,16 @@ private fun PerfilTabContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Avatar Institucional
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .clip(CircleShape)
-                .background(CamilaGreen.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = CamilaGreen,
-                modifier = Modifier.size(52.dp),
-            )
-        }
+        // Avatar Institucional Interativo
+        ProfileAvatar(
+            user = currentUser,
+            size = 90.dp,
+            isEditable = true,
+            onUserUpdated = onUserUpdated,
+            onError = { errorMsg ->
+                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+            }
+        )
 
         // Nome e perfil
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

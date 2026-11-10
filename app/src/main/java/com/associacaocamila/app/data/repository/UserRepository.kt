@@ -1,11 +1,13 @@
 package com.associacaocamila.app.data.repository
 
+import android.net.Uri
 import com.associacaocamila.app.data.model.Dependent
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -20,10 +22,12 @@ interface UserRepository {
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
     suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit>
+    suspend fun uploadProfilePhoto(userId: String, imageUri: Uri): Result<String>
 }
 
 class UserRepositoryImpl(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val storage: FirebaseStorage = FirebaseStorage.getInstance(),
 ) : UserRepository {
 
     private val usersCollection get() = firestore.collection(USERS_COLLECTION)
@@ -145,6 +149,17 @@ class UserRepositoryImpl(
                 )
                 .await()
         }
+
+    override suspend fun uploadProfilePhoto(userId: String, imageUri: Uri): Result<String> = runCatching {
+        val storagePath = "profile_photos/${userId}.jpg"
+        val storageRef = storage.reference.child(storagePath)
+        storageRef.putFile(imageUri).await()
+        val downloadUrl = storageRef.downloadUrl.await().toString()
+        usersCollection.document(userId)
+            .update("photoUrl", downloadUrl)
+            .await()
+        downloadUrl
+    }
 
     private companion object {
         const val USERS_COLLECTION = "users"
