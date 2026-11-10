@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
@@ -117,6 +118,7 @@ import com.associacaocamila.app.ui.profile.ProfileUiState
 import com.associacaocamila.app.ui.profile.ProfileViewModel
 import com.associacaocamila.app.ui.student.StudentAttendanceScreen
 import com.associacaocamila.app.ui.student.StudentWorkshopsScreen
+import com.associacaocamila.app.ui.van.VanBookingScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaBlue
@@ -141,6 +143,7 @@ sealed class NavigationItem(
     data object Chamada : NavigationItem("chamada", "Chamada", Icons.Default.CheckCircle)
     data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
     data object Turmas : NavigationItem("turmas", "Turmas", Icons.Default.School)
+    data object AgendamentoVan : NavigationItem("agendamento_van", "Agendamento da Van", Icons.Default.DirectionsBus)
     data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
     data object Ajuda : NavigationItem("ajuda", "Ajuda & Contato", Icons.AutoMirrored.Filled.HelpOutline)
 }
@@ -180,10 +183,14 @@ fun HomeScreen(
                     add(NavigationItem.MinhasOficinas)
                     add(NavigationItem.Frequencia)
                 }
-                UserRole.PROFESSOR -> add(NavigationItem.Chamada)
+                UserRole.PROFESSOR -> {
+                    add(NavigationItem.Chamada)
+                    add(NavigationItem.AgendamentoVan)
+                }
                 UserRole.ADMIN -> {
                     add(NavigationItem.Aprovacoes)
                     add(NavigationItem.Turmas)
+                    add(NavigationItem.AgendamentoVan)
                 }
             }
             add(NavigationItem.Perfil)
@@ -406,6 +413,10 @@ fun HomeScreen(
                     is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
                     is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()
+                    is NavigationItem.AgendamentoVan -> VanBookingScreen(
+                        currentUser = userState,
+                        onNavigateBack = { selectedRoute = NavigationItem.Inicio.route }
+                    )
                     is NavigationItem.Perfil -> PerfilTabContent(
                         currentUser = userState,
                         onUserUpdated = { updated ->
