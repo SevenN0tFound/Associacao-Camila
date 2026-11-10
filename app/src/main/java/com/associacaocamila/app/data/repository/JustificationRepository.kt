@@ -2,6 +2,7 @@ package com.associacaocamila.app.data.repository
 
 import android.net.Uri
 import com.associacaocamila.app.data.model.AbsenceJustification
+import com.associacaocamila.app.data.model.AttendanceRecord
 import com.associacaocamila.app.data.model.AttendanceStatus
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -39,12 +40,7 @@ class JustificationRepositoryImpl(
         var finalAttachmentUrl = justification.attachmentUrl
 
         if (fileUri != null) {
-            val extension = when {
-                mimeType?.contains("pdf", ignoreCase = true) == true -> "pdf"
-                mimeType?.contains("png", ignoreCase = true) == true -> "png"
-                else -> "jpg"
-            }
-            val storagePath = "justifications/${justification.id}_${System.currentTimeMillis()}.$extension"
+            val storagePath = "justifications/${justification.id}"
             val storageRef = storage.reference.child(storagePath)
             storageRef.putFile(fileUri).await()
             finalAttachmentUrl = storageRef.downloadUrl.await().toString()
@@ -103,14 +99,26 @@ class JustificationRepositoryImpl(
             .await()
 
         if (justification.attendanceRecordId.isNotBlank()) {
-            attendancesCollection.document(justification.attendanceRecordId)
-                .update(
+            val docRef = attendancesCollection.document(justification.attendanceRecordId)
+            val snapshot = docRef.get().await()
+            val record = snapshot.toObject(AttendanceRecord::class.java)
+            if (record != null) {
+                val updatedStatusMap = record.statusMap + (justification.studentId to AttendanceStatus.JUSTIFICADO.name)
+                val updatedAttendanceMap = record.attendanceMap + (justification.studentId to true)
+                docRef.update(
+                    mapOf(
+                        "statusMap" to updatedStatusMap,
+                        "attendanceMap" to updatedAttendanceMap
+                    )
+                ).await()
+            } else {
+                docRef.update(
                     mapOf(
                         "statusMap.${justification.studentId}" to AttendanceStatus.JUSTIFICADO.name,
-                        "attendanceMap.${justification.studentId}" to true // Presença atestada/justificada
+                        "attendanceMap.${justification.studentId}" to true
                     )
-                )
-                .await()
+                ).await()
+            }
         }
     }
 
