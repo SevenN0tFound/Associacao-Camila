@@ -1,7 +1,5 @@
 package com.associacaocamila.app.ui.admin
 
-import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.associacaocamila.app.data.model.Dependent
@@ -191,22 +189,6 @@ class AdminApprovalsViewModel(
                         ?: "Não foi possível vincular o dependente. Tente novamente."
                 }
             _isAddingDependent.value = false
-        }
-    }
-
-    fun uploadUserPhoto(userId: String, imageUri: Uri, context: Context) {
-        viewModelScope.launch {
-            _processingUserIds.value += userId
-            _actionError.value = null
-            repository.uploadProfilePhoto(userId, imageUri, context)
-                .onSuccess {
-                    _feedbackMessage.value = "Foto 3x4 atualizada com sucesso!"
-                }
-                .onFailure { error ->
-                    _actionError.value = error.localizedMessage
-                        ?: "Não foi possível carregar a foto 3x4. Tente novamente."
-                }
-            _processingUserIds.value -= userId
         }
     }
 

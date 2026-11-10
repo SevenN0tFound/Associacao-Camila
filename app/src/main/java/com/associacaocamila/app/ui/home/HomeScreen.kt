@@ -241,7 +241,6 @@ fun HomeScreen(
                                     ProfileAvatar(
                                         user = userState,
                                         size = 46.dp,
-                                        isEditable = false
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
@@ -515,7 +514,6 @@ private fun InicioTabContent(
                 ProfileAvatar(
                     user = currentUser,
                     size = 56.dp,
-                    isEditable = false
                 )
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
@@ -1041,15 +1039,10 @@ private fun PerfilTabContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Avatar Institucional Interativo
+        // Avatar Institucional Padronizado
         ProfileAvatar(
             user = currentUser,
             size = 90.dp,
-            isEditable = true,
-            onUserUpdated = onUserUpdated,
-            onError = { errorMsg ->
-                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-            }
         )
 
         // Nome e perfil
@@ -1439,7 +1432,7 @@ private fun PerfilTabContent(
 
                 HorizontalDivider(color = CamilaGray.copy(alpha = 0.2f))
 
-                // Avatar Interativo para troca de foto no perfil
+                // Avatar Institucional Padronizado
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -1447,11 +1440,6 @@ private fun PerfilTabContent(
                     ProfileAvatar(
                         user = currentUser,
                         size = 80.dp,
-                        isEditable = true,
-                        onUserUpdated = onUserUpdated,
-                        onError = { errorMsg ->
-                            Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                        }
                     )
                 }
 

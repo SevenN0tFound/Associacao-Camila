@@ -1,9 +1,6 @@
 package com.associacaocamila.app.ui.admin
 
-import android.net.Uri
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -31,7 +28,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -105,7 +101,6 @@ fun AdminApprovalsScreen(
     modifier: Modifier = Modifier,
     viewModel: AdminApprovalsViewModel = viewModel(),
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val actionError by viewModel.actionError.collectAsState()
     val feedbackMessage by viewModel.feedbackMessage.collectAsState()
@@ -131,9 +126,6 @@ fun AdminApprovalsScreen(
             viewModel.unlinkDependent(guardianId, dependentId, dependentName)
         },
         onLoadStudents = { viewModel.loadAvailableStudents() },
-        onUploadPhoto = { userId, uri ->
-            viewModel.uploadUserPhoto(userId, uri, context)
-        },
         onDismissError = { viewModel.clearActionError() },
         onDismissFeedback = { viewModel.clearFeedbackMessage() },
         modifier = modifier,
@@ -154,7 +146,6 @@ fun AdminApprovalsContent(
     onLinkStudent: (guardianId: String, student: User, onSuccess: () -> Unit) -> Unit = { _, _, _ -> },
     onUnlinkDependent: (guardianId: String, dependentId: String, dependentName: String) -> Unit = { _, _, _ -> },
     onLoadStudents: () -> Unit = {},
-    onUploadPhoto: (userId: String, uri: Uri) -> Unit = { _, _ -> },
     onDismissError: () -> Unit = {},
     onDismissFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -331,7 +322,6 @@ fun AdminApprovalsContent(
                                 onUnlinkDependent = { dependent ->
                                     dependentToUnlink = user to dependent
                                 },
-                                onUploadPhoto = { uri -> onUploadPhoto(user.id, uri) },
                             )
                         }
                     }
@@ -447,17 +437,8 @@ private fun AdminUserCard(
     onReject: () -> Unit,
     onOpenAddDependent: () -> Unit,
     onUnlinkDependent: (Dependent) -> Unit = {},
-    onUploadPhoto: (Uri) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            onUploadPhoto(uri)
-        }
-    }
-
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -475,7 +456,6 @@ private fun AdminUserCard(
                 ProfileAvatar(
                     user = user,
                     size = 46.dp,
-                    isEditable = false,
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -519,86 +499,40 @@ private fun AdminUserCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Badge com o perfil e ação para Definir Foto 3x4
+            // Badge com o perfil
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    RoleBadge(role = user.role, isPending = isPending)
+                RoleBadge(role = user.role, isPending = isPending)
 
-                    // Contador de dependentes se for RESPONSAVEL
-                    if (user.role == UserRole.RESPONSAVEL) {
-                        Surface(
-                            color = CamilaOrange.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(8.dp),
+                // Contador de dependentes se for RESPONSAVEL
+                if (user.role == UserRole.RESPONSAVEL) {
+                    Surface(
+                        color = CamilaOrange.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FamilyRestroom,
-                                    contentDescription = null,
-                                    tint = CamilaOrange,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (user.dependents.isEmpty()) {
-                                        "0 dependentes"
-                                    } else {
-                                        "${user.dependents.size} dep."
-                                    },
-                                    color = CamilaOrange,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.FamilyRestroom,
+                                contentDescription = null,
+                                tint = CamilaOrange,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (user.dependents.isEmpty()) {
+                                    "0 dependentes"
+                                } else {
+                                    "${user.dependents.size} dependente(s)"
+                                },
+                                color = CamilaOrange,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            )
                         }
-                    }
-                }
-
-                // Botão Definir / Alterar Foto 3x4
-                OutlinedButton(
-                    onClick = { photoPickerLauncher.launch("image/*") },
-                    enabled = !isProcessing,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, CamilaGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = CamilaGreenDark,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(34.dp),
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = CamilaGreen,
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Enviando...",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = CamilaGreenDark,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = CamilaGreenDark,
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (user.photoUrl.isNullOrBlank()) "Definir Foto 3x4" else "Alterar Foto 3x4",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = CamilaGreenDark,
-                        )
                     }
                 }
             }
