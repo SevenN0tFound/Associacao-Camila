@@ -110,6 +110,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import com.associacaocamila.app.data.model.AdminMetrics
 import com.associacaocamila.app.data.model.Notice
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
@@ -470,8 +471,21 @@ private fun InicioTabContent(
                 authorRole = "ADMIN",
             ),
         ),
+        isLoadingMetrics = false,
+        adminMetrics = AdminMetrics(
+            totalStudents = 142,
+            activeWorkshops = 8,
+            pendingVolunteers = 4,
+            overallAttendanceRate = 88,
+        ),
     )
     val context = LocalContext.current
+
+    LaunchedEffect(currentUser.role) {
+        if (currentUser.role == UserRole.ADMIN) {
+            actualViewModel?.loadAdminMetrics()
+        }
+    }
 
     val canManageNotices = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.PROFESSOR
     var showAddNoticeDialog by rememberSaveable { mutableStateOf(false) }
@@ -552,6 +566,14 @@ private fun InicioTabContent(
                     }
                 }
             }
+        }
+
+        // Painel Geral de Indicadores (visível exclusivamente para ADMIN)
+        if (currentUser.role == UserRole.ADMIN) {
+            AdminMetricsDashboardSection(
+                metrics = uiState.adminMetrics,
+                isLoading = uiState.isLoadingMetrics,
+            )
         }
 
         // Seção Destacada: Mural de Recados & Avisos
@@ -717,6 +739,191 @@ private fun InicioTabContent(
             },
             shape = RoundedCornerShape(16.dp)
         )
+    }
+}
+
+@Composable
+private fun AdminMetricsDashboardSection(
+    metrics: AdminMetrics,
+    isLoading: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(CamilaGreen.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Assessment,
+                        contentDescription = null,
+                        tint = CamilaGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Painel Geral / Indicadores",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark
+                    )
+                    Text(
+                        text = "Visão executiva em tempo real",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CamilaGray
+                    )
+                }
+            }
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = CamilaGreen
+                )
+            }
+        }
+
+        // Grade 2x2 de Cartões de Indicadores
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Cartão 1: Alunos Ativos
+            MetricCard(
+                title = "Alunos Ativos",
+                value = "${metrics.totalStudents}",
+                icon = Icons.Default.Person,
+                accentColor = CamilaGreen,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Cartão 2: Oficinas
+            MetricCard(
+                title = "Oficinas",
+                value = "${metrics.activeWorkshops}",
+                icon = Icons.Default.School,
+                accentColor = CamilaGreenDark,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Cartão 3: Novos Voluntários
+            MetricCard(
+                title = "Novos Voluntários",
+                value = "${metrics.pendingVolunteers}",
+                icon = Icons.Default.Handshake,
+                accentColor = CamilaOrange,
+                badgeText = if (metrics.pendingVolunteers > 0) "${metrics.pendingVolunteers} pendente(s)" else "Sem pendências",
+                modifier = Modifier.weight(1f)
+            )
+
+            // Cartão 4: Presença Geral
+            MetricCard(
+                title = "Presença Geral",
+                value = "${metrics.overallAttendanceRate}%",
+                icon = Icons.Default.CheckCircle,
+                accentColor = CamilaGreen,
+                badgeText = "Assiduidade",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    badgeText: String? = null,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.2f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (badgeText != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = accentColor.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = accentColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = CamilaGray,
+                maxLines = 1
+            )
+        }
     }
 }
 

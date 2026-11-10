@@ -2,7 +2,10 @@ package com.associacaocamila.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.associacaocamila.app.data.model.AdminMetrics
 import com.associacaocamila.app.data.model.Notice
+import com.associacaocamila.app.data.repository.AdminMetricsRepository
+import com.associacaocamila.app.data.repository.AdminMetricsRepositoryImpl
 import com.associacaocamila.app.data.repository.NoticeRepository
 import com.associacaocamila.app.data.repository.NoticeRepositoryImpl
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,10 +22,13 @@ data class HomeUiState(
     val isDeletingNotice: Boolean = false,
     val userMessage: String? = null,
     val errorMessage: String? = null,
+    val isLoadingMetrics: Boolean = false,
+    val adminMetrics: AdminMetrics = AdminMetrics(),
 )
 
 class HomeViewModel(
     private val noticeRepository: NoticeRepository = NoticeRepositoryImpl(),
+    private val adminMetricsRepository: AdminMetricsRepository = AdminMetricsRepositoryImpl(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -125,6 +131,26 @@ class HomeViewModel(
                             errorMessage = error.localizedMessage
                                 ?: "Erro ao remover aviso do mural. Tente novamente.",
                         )
+                    }
+                }
+        }
+    }
+
+    fun loadAdminMetrics() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMetrics = true) }
+            adminMetricsRepository.getAdminMetrics()
+                .onSuccess { metrics ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingMetrics = false,
+                            adminMetrics = metrics,
+                        )
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(isLoadingMetrics = false)
                     }
                 }
         }
