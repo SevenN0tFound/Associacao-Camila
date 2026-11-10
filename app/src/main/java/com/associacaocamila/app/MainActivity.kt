@@ -7,16 +7,20 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.associacaocamila.app.data.model.User
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.associacaocamila.app.ui.auth.AuthViewModel
 import com.associacaocamila.app.ui.auth.LoginScreen
+import com.associacaocamila.app.ui.auth.SessionState
 import com.associacaocamila.app.ui.home.HomeScreen
+import com.associacaocamila.app.ui.splash.SplashScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
+import com.associacaocamila.app.util.NotificationHelper
 
 class MainActivity : ComponentActivity() {
 
@@ -27,31 +31,70 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // Inicializa canais de notificação institucional
-        com.associacaocamila.app.util.NotificationHelper.createNotificationChannels(this)
+        NotificationHelper.createNotificationChannels(this)
 
         setContent {
             AssociacaoCamilaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    var loggedUser by remember { mutableStateOf<User?>(null) }
+                    val sessionState by authViewModel.sessionState.collectAsState()
+                    val currentUser by authViewModel.currentUser.collectAsState()
 
-                    if (loggedUser == null) {
-                        LoginScreen(
-                            viewModel = authViewModel,
-                            onLoginSuccess = { user ->
-                                loggedUser = user
+                    when (val state = sessionState) {
+                        is SessionState.Loading -> {
+                            SplashScreen()
+                        }
+
+                        is SessionState.Authenticated,
+                        is SessionState.Unauthenticated -> {
+                            val navController = rememberNavController()
+                            val startDestination = if (state is SessionState.Authenticated && currentUser != null) {
+                                "home"
+                            } else {
+                                "login"
                             }
-                        )
-                    } else {
-                        HomeScreen(
-                            currentUser = loggedUser!!,
-                            onUserUpdated = { updated ->
-                                loggedUser = updated
-                            },
-                            onLogout = {
-                                authViewModel.signOut()
-                                loggedUser = null
+
+                            NavHost(
+                                navController = navController,
+                                startDestination = startDestination,
+                            ) {
+                                composable("login") {
+                                    LoginScreen(
+                                        viewModel = authViewModel,
+                                        onLoginSuccess = { user ->
+                                            authViewModel.onLoginSuccess(user)
+                                            navController.navigate("home") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        },
+                                    )
+                                }
+
+                                composable("home") {
+                                    val user = currentUser
+                                    if (user == null) {
+                                        // Fallback de proteção de rota
+                                        LaunchedEffect(Unit) {
+                                            navController.navigate("login") {
+                                                popUpTo(0) { inclusive = true }
+                                            }
+                                        }
+                                    } else {
+                                        HomeScreen(
+                                            currentUser = user,
+                                            onUserUpdated = { updated ->
+                                                authViewModel.updateCurrentUser(updated)
+                                            },
+                                            onLogout = {
+                                                authViewModel.signOut()
+                                                navController.navigate("login") {
+                                                    popUpTo(0) { inclusive = true }
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
                             }
-                        )
+                        }
                     }
                 }
             }

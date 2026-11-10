@@ -22,6 +22,7 @@ interface UserRepository {
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
     suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit>
+    suspend fun getUser(userId: String): Result<User>
 }
 
 class UserRepositoryImpl(
@@ -147,6 +148,17 @@ class UserRepositoryImpl(
                 )
                 .await()
         }
+
+    override suspend fun getUser(userId: String): Result<User> = runCatching {
+        require(userId.isNotBlank()) { "ID do usuário não pode ser vazio." }
+        val snapshot = usersCollection.document(userId).get().await()
+        if (snapshot.exists()) {
+            snapshot.toObject(User::class.java)?.copy(id = snapshot.id)
+                ?: error("Falha ao mapear documento do usuário.")
+        } else {
+            error("Perfil do usuário não encontrado no Firestore.")
+        }
+    }
 
     private companion object {
         const val USERS_COLLECTION = "users"

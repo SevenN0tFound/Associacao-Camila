@@ -53,6 +53,9 @@ dependencies {
     // Coil para carregamento assíncrono de imagens
     implementation("io.coil-kt:coil-compose:2.6.0")
 
+    // Jetpack Navigation Compose
+    implementation("androidx.navigation:navigation-compose:2.8.5")
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
