@@ -2,9 +2,9 @@ package com.associacaocamila.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.associacaocamila.app.data.model.Announcement
-import com.associacaocamila.app.data.repository.AnnouncementRepository
-import com.associacaocamila.app.data.repository.AnnouncementRepositoryImpl
+import com.associacaocamila.app.data.model.Notice
+import com.associacaocamila.app.data.repository.NoticeRepository
+import com.associacaocamila.app.data.repository.NoticeRepositoryImpl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,78 +13,80 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
-    val isLoadingAnnouncements: Boolean = true,
-    val announcements: List<Announcement> = emptyList(),
-    val isPostingAnnouncement: Boolean = false,
-    val isDeletingAnnouncement: Boolean = false,
+    val isLoadingNotices: Boolean = true,
+    val notices: List<Notice> = emptyList(),
+    val isPostingNotice: Boolean = false,
+    val isDeletingNotice: Boolean = false,
     val userMessage: String? = null,
     val errorMessage: String? = null,
 )
 
 class HomeViewModel(
-    private val announcementRepository: AnnouncementRepository = AnnouncementRepositoryImpl(),
+    private val noticeRepository: NoticeRepository = NoticeRepositoryImpl(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        observeAnnouncements()
+        observeNotices()
     }
 
-    fun observeAnnouncements() {
+    fun observeNotices() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingAnnouncements = true) }
-            announcementRepository.getAnnouncements()
+            _uiState.update { it.copy(isLoadingNotices = true) }
+            noticeRepository.getNotices()
                 .catch { error ->
                     _uiState.update {
                         it.copy(
-                            isLoadingAnnouncements = false,
+                            isLoadingNotices = false,
                             errorMessage = error.localizedMessage
-                                ?: "Erro ao carregar o feed de comunicados.",
+                                ?: "Erro ao carregar o mural de recados e avisos.",
                         )
                     }
                 }
                 .collect { list ->
                     _uiState.update {
                         it.copy(
-                            isLoadingAnnouncements = false,
-                            announcements = list,
+                            isLoadingNotices = false,
+                            notices = list,
                         )
                     }
                 }
         }
     }
 
-    fun createAnnouncement(
+    fun addNotice(
         title: String,
-        message: String,
+        content: String,
         category: String,
-        authorName: String = "Coordenação",
+        authorName: String,
+        authorRole: String = "",
         onSuccess: () -> Unit = {},
     ) {
-        if (title.isBlank() || message.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Título e mensagem são obrigatórios.") }
+        if (title.isBlank() || content.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Título e conteúdo são obrigatórios.") }
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isPostingAnnouncement = true, errorMessage = null, userMessage = null) }
+            _uiState.update { it.copy(isPostingNotice = true, errorMessage = null, userMessage = null) }
 
-            val newAnnouncement = Announcement(
+            val newNotice = Notice(
                 title = title.trim(),
-                message = message.trim(),
-                category = category.trim().ifBlank { "Geral" },
+                content = content.trim(),
+                category = category.trim().ifBlank { "GERAL" }.uppercase(),
                 authorName = authorName.trim().ifBlank { "Coordenação" },
+                authorRole = authorRole.trim(),
                 timestamp = System.currentTimeMillis(),
             )
 
-            announcementRepository.postAnnouncement(newAnnouncement)
+            noticeRepository.addNotice(newNotice)
                 .onSuccess {
                     _uiState.update {
                         it.copy(
-                            isPostingAnnouncement = false,
-                            userMessage = "Comunicado publicado com sucesso!",
+                            isPostingNotice = false,
+                            userMessage = "Aviso publicado no mural com sucesso!",
                         )
                     }
                     onSuccess()
@@ -92,36 +94,36 @@ class HomeViewModel(
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(
-                            isPostingAnnouncement = false,
+                            isPostingNotice = false,
                             errorMessage = error.localizedMessage
-                                ?: "Erro ao publicar comunicado. Tente novamente.",
+                                ?: "Erro ao publicar aviso. Tente novamente.",
                         )
                     }
                 }
         }
     }
 
-    fun removeAnnouncement(id: String) {
+    fun deleteNotice(id: String) {
         if (id.isBlank()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isDeletingAnnouncement = true, errorMessage = null, userMessage = null) }
+            _uiState.update { it.copy(isDeletingNotice = true, errorMessage = null, userMessage = null) }
 
-            announcementRepository.deleteAnnouncement(id)
+            noticeRepository.deleteNotice(id)
                 .onSuccess {
                     _uiState.update {
                         it.copy(
-                            isDeletingAnnouncement = false,
-                            userMessage = "Comunicado removido com sucesso!",
+                            isDeletingNotice = false,
+                            userMessage = "Aviso removido do mural com sucesso!",
                         )
                     }
                 }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(
-                            isDeletingAnnouncement = false,
+                            isDeletingNotice = false,
                             errorMessage = error.localizedMessage
-                                ?: "Erro ao remover comunicado. Tente novamente.",
+                                ?: "Erro ao remover aviso do mural. Tente novamente.",
                         )
                     }
                 }

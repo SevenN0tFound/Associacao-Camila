@@ -106,7 +106,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.associacaocamila.app.data.model.Announcement
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import com.associacaocamila.app.data.model.Notice
 import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
@@ -435,35 +438,39 @@ private fun InicioTabContent(
     val isInspectionMode = LocalInspectionMode.current
     val actualViewModel = if (isInspectionMode) null else (homeViewModel ?: viewModel())
     val uiState = actualViewModel?.uiState?.collectAsState()?.value ?: HomeUiState(
-        isLoadingAnnouncements = false,
-        announcements = listOf(
-            Announcement(
+        isLoadingNotices = false,
+        notices = listOf(
+            Notice(
                 id = "1",
                 title = "Oficina de Fortalecimento",
-                message = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
-                category = "Oficinas",
-                authorName = "Coordenação"
+                content = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
+                category = "EVENTO",
+                authorName = "Coordenação",
+                authorRole = "ADMIN",
             ),
-            Announcement(
+            Notice(
                 id = "2",
-                title = "Projeto Mídias Force",
-                message = "Capacitação prática em comunicação, audiovisual e produção de conteúdo digital.",
-                category = "Oficinas",
-                authorName = "Coordenação"
-            ),
-            Announcement(
-                id = "3",
                 title = "Acolhimento e Assistência Social",
-                message = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipe técnica.",
-                category = "Acolhimento",
-                authorName = "Serviço Social"
-            )
-        )
+                content = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipe técnica.",
+                category = "GERAL",
+                authorName = "Serviço Social",
+                authorRole = "PROFESSOR",
+            ),
+            Notice(
+                id = "3",
+                title = "Recesso das Aulas de Informática",
+                content = "Informamos que nesta sexta-feira não haverá aula devido à manutenção dos equipamentos.",
+                category = "RECESSO",
+                authorName = "Secretaria",
+                authorRole = "ADMIN",
+            ),
+        ),
     )
     val context = LocalContext.current
 
-    var showCreateSheet by rememberSaveable { mutableStateOf(false) }
-    var announcementToDelete by remember { mutableStateOf<Announcement?>(null) }
+    val canManageNotices = currentUser.role == UserRole.ADMIN || currentUser.role == UserRole.PROFESSOR
+    var showAddNoticeDialog by rememberSaveable { mutableStateOf(false) }
+    var noticeToDelete by remember { mutableStateOf<Notice?>(null) }
 
     LaunchedEffect(uiState.userMessage, uiState.errorMessage) {
         uiState.userMessage?.let { msg ->
@@ -542,7 +549,7 @@ private fun InicioTabContent(
             }
         }
 
-        // Seção com título e botão de ação se for ADMIN
+        // Seção Destacada: Mural de Recados & Avisos
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -554,11 +561,12 @@ private fun InicioTabContent(
                 Icon(
                     imageVector = Icons.Default.Campaign,
                     contentDescription = null,
-                    tint = CamilaOrange
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Avisos e Comunicados",
+                    text = "Mural de Recados & Avisos",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
@@ -566,22 +574,22 @@ private fun InicioTabContent(
                 )
             }
 
-            if (currentUser.role == UserRole.ADMIN) {
+            if (canManageNotices) {
                 Button(
-                    onClick = { showCreateSheet = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
+                    onClick = { showAddNoticeDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "Novo Comunicado",
+                        contentDescription = "Novo Aviso",
                         modifier = Modifier.size(16.dp),
                         tint = Color.White
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Novo Comunicado",
+                        text = "Novo Aviso",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
@@ -589,8 +597,8 @@ private fun InicioTabContent(
             }
         }
 
-        // Lista dinâmica ou estados de loading/vazio
-        if (uiState.isLoadingAnnouncements) {
+        // Lista dinâmica do Mural ou estados de loading/vazio
+        if (uiState.isLoadingNotices) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -602,7 +610,7 @@ private fun InicioTabContent(
                     strokeWidth = 3.dp
                 )
             }
-        } else if (uiState.announcements.isEmpty()) {
+        } else if (uiState.notices.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -616,52 +624,52 @@ private fun InicioTabContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Info,
+                        imageVector = Icons.Default.Campaign,
                         contentDescription = null,
                         tint = CamilaGray,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(36.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Nenhum comunicado no momento",
+                        text = "Nenhum comunicado no mural no momento",
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = CamilaGray
                     )
                 }
             }
         } else {
-            uiState.announcements.forEach { announcement ->
-                AnnouncementCard(
-                    announcement = announcement,
-                    isAdmin = currentUser.role == UserRole.ADMIN,
-                    onDeleteClick = { announcementToDelete = announcement }
+            uiState.notices.forEach { notice ->
+                NoticeCard(
+                    notice = notice,
+                    canDelete = canManageNotices,
+                    onDeleteClick = { noticeToDelete = notice }
                 )
             }
         }
     }
 
-    // BottomSheet para criação de novo comunicado (Exclusivo ADMIN)
-    if (showCreateSheet) {
-        CreateAnnouncementBottomSheet(
-            isPosting = uiState.isPostingAnnouncement,
-            authorName = currentUser.name.ifBlank { "Coordenação" },
-            onDismiss = { showCreateSheet = false },
-            onPost = { title, message, category ->
-                actualViewModel?.createAnnouncement(
+    // Diálogo de criação de novo aviso (ADMIN e PROFESSOR)
+    if (showAddNoticeDialog) {
+        AddNoticeDialog(
+            isPosting = uiState.isPostingNotice,
+            onDismiss = { showAddNoticeDialog = false },
+            onConfirm = { title, content, category ->
+                actualViewModel?.addNotice(
                     title = title,
-                    message = message,
+                    content = content,
                     category = category,
                     authorName = currentUser.name.ifBlank { "Coordenação" },
-                    onSuccess = { showCreateSheet = false }
+                    authorRole = currentUser.role.name,
+                    onSuccess = { showAddNoticeDialog = false }
                 )
             }
         )
     }
 
-    // Diálogo de confirmação para exclusão de comunicado (Exclusivo ADMIN)
-    announcementToDelete?.let { announcement ->
+    // Diálogo de confirmação para exclusão de aviso
+    noticeToDelete?.let { notice ->
         AlertDialog(
-            onDismissRequest = { announcementToDelete = null },
+            onDismissRequest = { noticeToDelete = null },
             icon = {
                 Icon(
                     imageVector = Icons.Default.Delete,
@@ -672,14 +680,14 @@ private fun InicioTabContent(
             },
             title = {
                 Text(
-                    text = "Remover Comunicado",
+                    text = "Remover Aviso",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center
                 )
             },
             text = {
                 Text(
-                    text = "Deseja realmente apagar o aviso \"${announcement.title}\"? Ele não será mais visível no feed de notícias dos usuários.",
+                    text = "Deseja realmente apagar o aviso \"${notice.title}\"? Ele não será mais visível no mural para os participantes e responsáveis.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = CamilaGray,
                     textAlign = TextAlign.Center,
@@ -689,8 +697,8 @@ private fun InicioTabContent(
             confirmButton = {
                 Button(
                     onClick = {
-                        actualViewModel?.removeAnnouncement(announcement.id)
-                        announcementToDelete = null
+                        actualViewModel?.deleteNotice(notice.id)
+                        noticeToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange)
                 ) {
@@ -698,7 +706,7 @@ private fun InicioTabContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { announcementToDelete = null }) {
+                TextButton(onClick = { noticeToDelete = null }) {
                     Text("Cancelar", color = CamilaGray)
                 }
             },
@@ -708,23 +716,20 @@ private fun InicioTabContent(
 }
 
 @Composable
-private fun AnnouncementCard(
-    announcement: Announcement,
-    isAdmin: Boolean,
+private fun NoticeCard(
+    notice: Notice,
+    canDelete: Boolean,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val categoryBadgeColor = when (announcement.category.lowercase()) {
-        "oficinas" -> CamilaGreen
-        "reunião", "reuniao" -> CamilaBlue
-        "acolhimento" -> CamilaOrange
-        else -> CamilaGreenDark // Geral
-    }
+    val categoryUpper = notice.category.uppercase()
+    val isUrgentOrRecess = categoryUpper == "URGENTE" || categoryUpper == "RECESSO"
+    val categoryBadgeColor = if (isUrgentOrRecess) CamilaOrange else CamilaGreen
 
-    val formattedDate = remember(announcement.timestamp) {
-        if (announcement.timestamp > 0) {
+    val formattedDate = remember(notice.timestamp) {
+        if (notice.timestamp > 0) {
             java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.forLanguageTag("pt-BR"))
-                .format(java.util.Date(announcement.timestamp))
+                .format(java.util.Date(notice.timestamp))
         } else {
             ""
         }
@@ -746,16 +751,17 @@ private fun AnnouncementCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Badge de Categoria
+                // Tag/Badge com a Categoria
                 Surface(
                     color = categoryBadgeColor.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, categoryBadgeColor.copy(alpha = 0.25f))
                 ) {
                     Text(
-                        text = announcement.category.uppercase(),
+                        text = categoryUpper,
                         color = categoryBadgeColor,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
 
@@ -777,15 +783,15 @@ private fun AnnouncementCard(
                         }
                     }
 
-                    if (isAdmin) {
-                        Spacer(modifier = Modifier.width(4.dp))
+                    if (canDelete) {
+                        Spacer(modifier = Modifier.width(6.dp))
                         IconButton(
                             onClick = onDeleteClick,
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
-                                contentDescription = "Remover comunicado",
+                                contentDescription = "Remover aviso",
                                 tint = CamilaOrange,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -794,198 +800,203 @@ private fun AnnouncementCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Título
+            // Título em negrito
             Text(
-                text = announcement.title,
+                text = notice.title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Mensagem completa
+            // Texto do comunicado com tipografia limpa
             Text(
-                text = announcement.message,
+                text = notice.content,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 20.sp
+                lineHeight = 22.sp
             )
 
-            if (announcement.authorName.isNotBlank() && announcement.authorName != "Coordenação") {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Publicado por: ${announcement.authorName}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CamilaGray
-                )
+            // Rodapé sutil com nome do autor e cargo
+            if (notice.authorName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CamilaGray.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = CamilaGray,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = buildString {
+                            append("Publicado por: ")
+                            append(notice.authorName)
+                            if (notice.authorRole.isNotBlank()) {
+                                append(" (${notice.authorRole.lowercase().replaceFirstChar { it.uppercase() }})")
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CamilaGray
+                    )
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateAnnouncementBottomSheet(
+private fun AddNoticeDialog(
     isPosting: Boolean,
-    authorName: String,
     onDismiss: () -> Unit,
-    onPost: (String, String, String) -> Unit,
+    onConfirm: (title: String, content: String, category: String) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
-    var message by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf("Geral") }
-    var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var content by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf("GERAL") }
 
-    val categories = listOf("Geral", "Oficinas", "Reunião", "Acolhimento")
+    val categories = listOf("GERAL", "EVENTO", "RECESSO", "URGENTE")
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = Color.White
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = "Novo Comunicado",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = CamilaGreenDark
-                    )
-                    Text(
-                        text = "Publicando como: $authorName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CamilaGray
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Fechar")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Campo de Título
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Título do Comunicado") },
-                placeholder = { Text("Ex: Início das Matrículas para Novas Oficinas") },
-                singleLine = true,
-                colors = outlinedFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Dropdown de Categoria
-            Text(
-                text = "Categoria",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            ExposedDropdownMenuBox(
-                expanded = categoryDropdownExpanded,
-                onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded)
-                    },
-                    colors = outlinedFieldColors(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                        .fillMaxWidth()
+    AlertDialog(
+        onDismissRequest = {
+            if (!isPosting) onDismiss()
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Campaign,
+                    contentDescription = null,
+                    tint = CamilaGreen,
+                    modifier = Modifier.size(24.dp)
                 )
-
-                ExposedDropdownMenu(
-                    expanded = categoryDropdownExpanded,
-                    onDismissRequest = { categoryDropdownExpanded = false }
-                ) {
-                    categories.forEach { cat ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = cat,
-                                    fontWeight = if (cat == category) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (cat == category) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
-                                )
-                            },
-                            onClick = {
-                                category = cat
-                                categoryDropdownExpanded = false
-                            }
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Novo Aviso no Mural",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark
+                )
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Campo de Mensagem
-            OutlinedTextField(
-                value = message,
-                onValueChange = { message = it },
-                label = { Text("Mensagem") },
-                placeholder = { Text("Escreva as informações detalhadas para a comunidade...") },
-                minLines = 3,
-                maxLines = 6,
-                colors = outlinedFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Botão Publicar Comunicado
-            Button(
-                onClick = { onPost(title, message, category) },
-                enabled = !isPosting && title.isNotBlank() && message.isNotBlank(),
+        },
+        text = {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = CamilaGreen,
-                    disabledContainerColor = CamilaGreen.copy(alpha = 0.5f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Informe o título, a categoria e a mensagem para os alunos e responsáveis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CamilaGray
                 )
+
+                // Campo Título
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Título do Aviso *") },
+                    placeholder = { Text("Ex: Recesso escolar no feriado") },
+                    singleLine = true,
+                    colors = outlinedFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isPosting
+                )
+
+                // Seletor de Categoria
+                Column {
+                    Text(
+                        text = "Categoria *",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        categories.forEach { cat ->
+                            val isSelected = selectedCategory == cat
+                            val chipColor = if (cat == "URGENTE" || cat == "RECESSO") CamilaOrange else CamilaGreen
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedCategory = cat },
+                                label = {
+                                    Text(
+                                        text = cat,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = chipColor.copy(alpha = 0.15f),
+                                    selectedLabelColor = chipColor
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = chipColor.copy(alpha = 0.35f),
+                                    selectedBorderColor = chipColor
+                                ),
+                                enabled = !isPosting
+                            )
+                        }
+                    }
+                }
+
+                // Campo Conteúdo
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("Conteúdo do Comunicado *") },
+                    placeholder = { Text("Escreva a mensagem detalhada...") },
+                    minLines = 3,
+                    maxLines = 6,
+                    colors = outlinedFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isPosting
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(title, content, selectedCategory) },
+                enabled = !isPosting && title.isNotBlank() && content.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen)
             ) {
                 if (isPosting) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        text = "Publicar Comunicado",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
                         color = Color.White
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Publicando...")
+                } else {
+                    Text("Publicar Aviso", fontWeight = FontWeight.Bold)
                 }
             }
-
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isPosting
+            ) {
+                Text("Cancelar", color = CamilaGray)
+            }
+        },
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable
