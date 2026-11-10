@@ -65,7 +65,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -614,7 +613,10 @@ private fun CreateWorkshopBottomSheet(
     var selectedTeacherId by rememberSaveable { mutableStateOf(teachers.firstOrNull()?.id.orEmpty()) }
     var teacherDropdownExpanded by remember { mutableStateOf(false) }
 
-    val selectedParticipantIds = remember { mutableStateListOf<String>() }
+    val uniqueParticipants = remember(participants) {
+        participants.distinctBy { it.id }.distinctBy { it.name.trim().lowercase() }
+    }
+    var selectedStudentIds by remember { mutableStateOf(setOf<String>()) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -749,31 +751,31 @@ private fun CreateWorkshopBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Matricular Participantes (${selectedParticipantIds.size})",
+                    text = "Matricular Participantes (${selectedStudentIds.size})",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                if (participants.isNotEmpty()) {
+                if (uniqueParticipants.isNotEmpty()) {
+                    val allSelected = uniqueParticipants.all { selectedStudentIds.contains(it.id) }
                     TextButton(
                         onClick = {
-                            if (selectedParticipantIds.size == participants.size) {
-                                selectedParticipantIds.clear()
+                            selectedStudentIds = if (allSelected) {
+                                emptySet()
                             } else {
-                                selectedParticipantIds.clear()
-                                selectedParticipantIds.addAll(participants.map { it.id })
+                                selectedStudentIds + uniqueParticipants.map { it.id }
                             }
                         }
                     ) {
                         Text(
-                            text = if (selectedParticipantIds.size == participants.size) "Desmarcar todos" else "Marcar todos",
+                            text = if (allSelected) "Desmarcar todos" else "Marcar todos",
                             color = CamilaGreen
                         )
                     }
                 }
             }
 
-            if (participants.isEmpty()) {
+            if (uniqueParticipants.isEmpty()) {
                 Surface(
                     color = CamilaGray.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(8.dp),
@@ -787,16 +789,16 @@ private fun CreateWorkshopBottomSheet(
                     )
                 }
             } else {
-                participants.forEach { participant ->
-                    val isSelected = selectedParticipantIds.contains(participant.id)
+                uniqueParticipants.forEach { participant ->
+                    val isSelected = selectedStudentIds.contains(participant.id)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (isSelected) {
-                                    selectedParticipantIds.remove(participant.id)
+                                selectedStudentIds = if (isSelected) {
+                                    selectedStudentIds - participant.id
                                 } else {
-                                    selectedParticipantIds.add(participant.id)
+                                    selectedStudentIds + participant.id
                                 }
                             }
                             .padding(vertical = 4.dp),
@@ -805,10 +807,10 @@ private fun CreateWorkshopBottomSheet(
                         Checkbox(
                             checked = isSelected,
                             onCheckedChange = { checked ->
-                                if (checked) {
-                                    selectedParticipantIds.add(participant.id)
+                                selectedStudentIds = if (checked) {
+                                    selectedStudentIds + participant.id
                                 } else {
-                                    selectedParticipantIds.remove(participant.id)
+                                    selectedStudentIds - participant.id
                                 }
                             },
                             colors = CheckboxDefaults.colors(checkedColor = CamilaGreen)
@@ -835,7 +837,7 @@ private fun CreateWorkshopBottomSheet(
                                 }
                             }
 
-                            if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
+                            if (!participant.responsibleName.isNullOrBlank()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Face,
@@ -871,7 +873,7 @@ private fun CreateWorkshopBottomSheet(
                         name,
                         description,
                         selectedTeacherId,
-                        selectedParticipantIds.toList()
+                        selectedStudentIds.toList()
                     )
                 },
                 enabled = !isCreating && name.isNotBlank(),
@@ -921,8 +923,11 @@ private fun EditWorkshopBottomSheet(
     }
     var teacherDropdownExpanded by remember { mutableStateOf(false) }
 
-    val selectedParticipantIds = remember(workshop.id) {
-        mutableStateListOf<String>().apply { addAll(workshop.enrolledStudentIds) }
+    val uniqueParticipants = remember(participants) {
+        participants.distinctBy { it.id }.distinctBy { it.name.trim().lowercase() }
+    }
+    var selectedStudentIds by remember(workshop.id) {
+        mutableStateOf(workshop.enrolledStudentIds.toSet())
     }
 
     ModalBottomSheet(
@@ -1058,31 +1063,31 @@ private fun EditWorkshopBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Participantes Matriculados (${selectedParticipantIds.size})",
+                    text = "Participantes Matriculados (${selectedStudentIds.size})",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                if (participants.isNotEmpty()) {
+                if (uniqueParticipants.isNotEmpty()) {
+                    val allSelected = uniqueParticipants.all { selectedStudentIds.contains(it.id) }
                     TextButton(
                         onClick = {
-                            if (selectedParticipantIds.size == participants.size) {
-                                selectedParticipantIds.clear()
+                            selectedStudentIds = if (allSelected) {
+                                emptySet()
                             } else {
-                                selectedParticipantIds.clear()
-                                selectedParticipantIds.addAll(participants.map { it.id })
+                                selectedStudentIds + uniqueParticipants.map { it.id }
                             }
                         }
                     ) {
                         Text(
-                            text = if (selectedParticipantIds.size == participants.size) "Desmarcar todos" else "Marcar todos",
+                            text = if (allSelected) "Desmarcar todos" else "Marcar todos",
                             color = CamilaGreen
                         )
                     }
                 }
             }
 
-            if (participants.isEmpty()) {
+            if (uniqueParticipants.isEmpty()) {
                 Surface(
                     color = CamilaGray.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(8.dp),
@@ -1096,16 +1101,16 @@ private fun EditWorkshopBottomSheet(
                     )
                 }
             } else {
-                participants.forEach { participant ->
-                    val isSelected = selectedParticipantIds.contains(participant.id)
+                uniqueParticipants.forEach { participant ->
+                    val isSelected = selectedStudentIds.contains(participant.id)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (isSelected) {
-                                    selectedParticipantIds.remove(participant.id)
+                                selectedStudentIds = if (isSelected) {
+                                    selectedStudentIds - participant.id
                                 } else {
-                                    selectedParticipantIds.add(participant.id)
+                                    selectedStudentIds + participant.id
                                 }
                             }
                             .padding(vertical = 4.dp),
@@ -1114,10 +1119,10 @@ private fun EditWorkshopBottomSheet(
                         Checkbox(
                             checked = isSelected,
                             onCheckedChange = { checked ->
-                                if (checked) {
-                                    selectedParticipantIds.add(participant.id)
+                                selectedStudentIds = if (checked) {
+                                    selectedStudentIds + participant.id
                                 } else {
-                                    selectedParticipantIds.remove(participant.id)
+                                    selectedStudentIds - participant.id
                                 }
                             },
                             colors = CheckboxDefaults.colors(checkedColor = CamilaGreen)
@@ -1144,7 +1149,7 @@ private fun EditWorkshopBottomSheet(
                                 }
                             }
 
-                            if (participant.isDependent && !participant.responsibleName.isNullOrBlank()) {
+                            if (!participant.responsibleName.isNullOrBlank()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Face,
@@ -1181,7 +1186,7 @@ private fun EditWorkshopBottomSheet(
                             name = name.trim(),
                             description = description.trim(),
                             teacherId = selectedTeacherId.trim(),
-                            enrolledStudentIds = selectedParticipantIds.toList()
+                            enrolledStudentIds = selectedStudentIds.toList()
                         )
                     )
                 },

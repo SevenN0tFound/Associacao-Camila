@@ -95,38 +95,85 @@ class WorkshopRepositoryImpl(
             .get()
             .await()
 
-        val studentsList = studentsSnapshot.documents.mapNotNull { doc ->
-            val user = doc.toObject(User::class.java)?.copy(id = doc.id) ?: return@mapNotNull null
-            EligibleParticipant(
-                id = user.id,
-                name = user.name.ifBlank { "Sem nome" },
-                isDependent = false,
-                email = user.email
-            )
+        val students = studentsSnapshot.documents.mapNotNull { doc ->
+            doc.toObject(User::class.java)?.copy(id = doc.id)
         }
 
-        // Busca usuários com perfil RESPONSAVEL aprovados para extrair seus dependentes
+        // Busca usuários com perfil RESPONSAVEL aprovados para extrair seus dependentes e vínculos
         val responsiblesSnapshot = usersCollection
             .whereEqualTo("role", UserRole.RESPONSAVEL.name)
             .whereEqualTo("status", UserStatus.APPROVED.name)
             .get()
             .await()
 
-        val dependentsList = responsiblesSnapshot.documents.flatMap { doc ->
-            val responsible = doc.toObject(User::class.java)?.copy(id = doc.id) ?: return@flatMap emptyList()
-            responsible.dependents.map { dependent ->
-                EligibleParticipant(
-                    id = dependent.id,
-                    name = dependent.name.ifBlank { "Sem nome" },
-                    isDependent = true,
-                    responsibleName = responsible.name.ifBlank { "Responsável" },
-                    relationship = dependent.relationship,
-                    email = null
-                )
+        val responsibles = responsiblesSnapshot.documents.mapNotNull { doc ->
+            doc.toObject(User::class.java)?.copy(id = doc.id)
+        }
+
+        // Mapeia vínculos de responsáveis por ID do aluno e por Nome
+        val responsibleById = mutableMapOf<String, String>()
+        val responsibleByName = mutableMapOf<String, Pair<String, String?>>()
+
+        responsibles.forEach { resp ->
+            val respName = resp.name.ifBlank { "Responsável" }
+            resp.associatedStudentIds.forEach { studentId ->
+                if (studentId.isNotBlank()) {
+                    responsibleById[studentId] = respName
+                }
+            }
+            resp.dependents.forEach { dep ->
+                if (dep.id.isNotBlank()) {
+                    responsibleById[dep.id] = respName
+                }
+                val depNormName = dep.name.trim().lowercase()
+                if (depNormName.isNotBlank()) {
+                    responsibleByName[depNormName] = respName to dep.relationship
+                }
             }
         }
 
-        studentsList + dependentsList
+        // Constrói lista de ALUNO unificada (prioriza cadastro independente vinculando responsável se houver)
+        val studentsList = students.map { user ->
+            val normName = user.name.trim().lowercase()
+            val respLink = responsibleById[user.id] ?: responsibleByName[normName]?.first
+            val relationship = responsibleByName[normName]?.second
+
+            EligibleParticipant(
+                id = user.id,
+                name = user.name.ifBlank { "Sem nome" },
+                isDependent = respLink != null,
+                responsibleName = respLink,
+                relationship = relationship,
+                email = user.email.ifBlank { null }
+            )
+        }
+
+        val studentIds = students.map { it.id }.toSet()
+        val studentNames = students.map { it.name.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+
+        // Mapeia apenas dependentes que ainda NÃO possuem conta própria de ALUNO
+        val dependentsList = responsibles.flatMap { resp ->
+            val respName = resp.name.ifBlank { "Responsável" }
+            resp.dependents
+                .filter { dep ->
+                    !studentIds.contains(dep.id) && !studentNames.contains(dep.name.trim().lowercase())
+                }
+                .map { dep ->
+                    EligibleParticipant(
+                        id = dep.id,
+                        name = dep.name.ifBlank { "Sem nome" },
+                        isDependent = true,
+                        responsibleName = respName,
+                        relationship = dep.relationship,
+                        email = null
+                    )
+                }
+        }
+
+        (studentsList + dependentsList)
+            .distinctBy { it.id }
+            .distinctBy { it.name.trim().lowercase() }
+            .sortedBy { it.name.lowercase() }
     }
 
     override suspend fun seedMockWorkshops(): Result<Unit> = runCatching {

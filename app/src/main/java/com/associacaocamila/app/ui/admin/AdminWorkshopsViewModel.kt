@@ -75,11 +75,16 @@ class AdminWorkshopsViewModel(
             val participantsResult = repository.getEligibleParticipants()
 
             _uiState.update { current ->
+                val rawParticipants = participantsResult.getOrDefault(current.eligibleParticipants)
+                val dedupedParticipants = rawParticipants
+                    .distinctBy { it.id }
+                    .distinctBy { it.name.trim().lowercase() }
+
                 current.copy(
                     isLoadingUsers = false,
                     teachers = teachersResult.getOrDefault(current.teachers),
                     students = studentsResult.getOrDefault(current.students),
-                    eligibleParticipants = participantsResult.getOrDefault(current.eligibleParticipants),
+                    eligibleParticipants = dedupedParticipants,
                     errorMessage = teachersResult.exceptionOrNull()?.localizedMessage
                         ?: studentsResult.exceptionOrNull()?.localizedMessage
                         ?: participantsResult.exceptionOrNull()?.localizedMessage
