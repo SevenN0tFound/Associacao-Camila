@@ -524,7 +524,7 @@ fun HomeScreen(
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
                     is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
-                    is NavigationItem.Aprovacoes -> AdminApprovalsScreen()
+                    is NavigationItem.Aprovacoes -> AdminApprovalsScreen(currentUser = userState)
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()
                     is NavigationItem.AgendamentoVan -> VanBookingScreen(
                         currentUser = userState,
@@ -2031,76 +2031,86 @@ private fun PerfilTabContent(
             com.associacaocamila.app.ui.components.DependentsSection(
                 dependents = currentUser.dependents,
                 onLinkStudentClick = {
-                    showSelectStudentSheet = true
-                    actualViewModel?.loadAvailableStudents()
+                    if (currentUser.role.uppercase() == "ADMIN") {
+                        showSelectStudentSheet = true
+                        actualViewModel?.loadAvailableStudents()
+                    }
                 },
                 onUnlinkDependentClick = { dep ->
-                    dependentToUnlink = dep
+                    if (currentUser.role.uppercase() == "ADMIN") {
+                        dependentToUnlink = dep
+                    }
                 },
-                canEdit = true,
+                currentUser = currentUser,
+                canEdit = (currentUser.role.uppercase() == "ADMIN"),
             )
 
-            if (showSelectStudentSheet) {
-                com.associacaocamila.app.ui.components.SelectStudentBottomSheet(
-                    availableStudents = uiState.availableStudents,
-                    alreadyLinkedIds = (currentUser.associatedStudentIds + currentUser.dependents.map { it.id }).toSet(),
-                    isLoading = uiState.isLoadingStudents,
-                    isLinking = uiState.isLinkingDependent,
-                    onDismiss = { showSelectStudentSheet = false },
-                    onRefreshStudents = { actualViewModel?.loadAvailableStudents() },
-                    onStudentSelected = { selectedStudent ->
-                        actualViewModel?.linkStudentAsDependent(
-                            guardian = currentUser,
-                            student = selectedStudent,
-                            onSuccess = { updatedGuardian ->
-                                onUserUpdated(updatedGuardian)
-                                showSelectStudentSheet = false
-                            },
-                        )
-                    },
-                )
-            }
+            // Ações de alteração de vínculo restritas estritamente para perfil ADMIN
+            if (currentUser.role.uppercase() == "ADMIN") {
+                if (showSelectStudentSheet) {
+                    com.associacaocamila.app.ui.components.SelectStudentBottomSheet(
+                        availableStudents = uiState.availableStudents,
+                        alreadyLinkedIds = (currentUser.associatedStudentIds + currentUser.dependents.map { it.id }).toSet(),
+                        isLoading = uiState.isLoadingStudents,
+                        isLinking = uiState.isLinkingDependent,
+                        onDismiss = { showSelectStudentSheet = false },
+                        onRefreshStudents = { actualViewModel?.loadAvailableStudents() },
+                        onStudentSelected = { selectedStudent ->
+                            actualViewModel?.linkStudentAsDependent(
+                                guardian = currentUser,
+                                student = selectedStudent,
+                                currentUser = currentUser,
+                                onSuccess = { updatedGuardian ->
+                                    onUserUpdated(updatedGuardian)
+                                    showSelectStudentSheet = false
+                                },
+                            )
+                        },
+                    )
+                }
 
-            dependentToUnlink?.let { dep ->
-                AlertDialog(
-                    onDismissRequest = { dependentToUnlink = null },
-                    title = {
-                        Text(
-                            text = "Desvincular Participante",
-                            fontWeight = FontWeight.Bold,
-                            color = CamilaGreenDark,
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "Deseja realmente desvincular ${dep.name.ifBlank { "este participante" }} da sua conta de responsável?",
-                            color = CamilaGray,
-                        )
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                actualViewModel?.unlinkDependent(
-                                    guardian = currentUser,
-                                    dependentId = dep.id,
-                                    dependentName = dep.name,
-                                    onSuccess = { updatedGuardian ->
-                                        onUserUpdated(updatedGuardian)
-                                        dependentToUnlink = null
-                                    },
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
-                        ) {
-                            Text("Desvincular", fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { dependentToUnlink = null }) {
-                            Text("Cancelar", color = CamilaGray)
-                        }
-                    },
-                )
+                dependentToUnlink?.let { dep ->
+                    AlertDialog(
+                        onDismissRequest = { dependentToUnlink = null },
+                        title = {
+                            Text(
+                                text = "Desvincular Participante",
+                                fontWeight = FontWeight.Bold,
+                                color = CamilaGreenDark,
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "Deseja realmente desvincular ${dep.name.ifBlank { "este participante" }} da sua conta de responsável?",
+                                color = CamilaGray,
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    actualViewModel?.unlinkDependent(
+                                        guardian = currentUser,
+                                        dependentId = dep.id,
+                                        dependentName = dep.name,
+                                        currentUser = currentUser,
+                                        onSuccess = { updatedGuardian ->
+                                            onUserUpdated(updatedGuardian)
+                                            dependentToUnlink = null
+                                        },
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = CamilaOrange),
+                            ) {
+                                Text("Desvincular", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { dependentToUnlink = null }) {
+                                Text("Cancelar", color = CamilaGray)
+                            }
+                        },
+                    )
+                }
             }
         }
 

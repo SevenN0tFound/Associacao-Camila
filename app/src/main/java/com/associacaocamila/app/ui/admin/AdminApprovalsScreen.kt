@@ -100,6 +100,7 @@ import com.associacaocamila.app.ui.theme.CamilaOrange
 fun AdminApprovalsScreen(
     modifier: Modifier = Modifier,
     viewModel: AdminApprovalsViewModel = viewModel(),
+    currentUser: User? = null,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val actionError by viewModel.actionError.collectAsState()
@@ -129,6 +130,7 @@ fun AdminApprovalsScreen(
         onDismissError = { viewModel.clearActionError() },
         onDismissFeedback = { viewModel.clearFeedbackMessage() },
         modifier = modifier,
+        currentUser = currentUser,
     )
 }
 
@@ -149,6 +151,7 @@ fun AdminApprovalsContent(
     onDismissError: () -> Unit = {},
     onDismissFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
+    currentUser: User? = null,
 ) {
     val context = LocalContext.current
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -322,6 +325,7 @@ fun AdminApprovalsContent(
                                 onUnlinkDependent = { dependent ->
                                     dependentToUnlink = user to dependent
                                 },
+                                currentUser = currentUser,
                             )
                         }
                     }
@@ -438,6 +442,7 @@ private fun AdminUserCard(
     onOpenAddDependent: () -> Unit,
     onUnlinkDependent: (Dependent) -> Unit = {},
     modifier: Modifier = Modifier,
+    currentUser: User? = null,
 ) {
     Card(
         modifier = modifier
@@ -543,30 +548,34 @@ private fun AdminUserCard(
                 HorizontalDivider(color = CamilaGray.copy(alpha = 0.15f))
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Botão secundário "Vincular Dependente"
-                OutlinedButton(
-                    onClick = onOpenAddDependent,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, CamilaGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = CamilaGreenDark,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PersonAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = CamilaGreenDark,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Vincular Dependente",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = CamilaGreenDark,
-                    )
+                // 1. Verificação de Papel (Role-Based Access):
+                // Apenas ADMIN pode acionar a vinculação de dependentes
+                if (currentUser?.role?.uppercase() == "ADMIN" || currentUser == null) {
+                    // Botão secundário "Vincular Dependente"
+                    OutlinedButton(
+                        onClick = onOpenAddDependent,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, CamilaGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = CamilaGreenDark,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = CamilaGreenDark,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Vincular Dependente",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark,
+                        )
+                    }
                 }
 
                 // Lista de Dependentes já vinculados ao responsável
@@ -585,7 +594,9 @@ private fun AdminUserCard(
                         user.dependents.forEach { dependent ->
                             DependentItemCard(
                                 dependent = dependent,
-                                onUnlink = { onUnlinkDependent(dependent) },
+                                onUnlink = if (currentUser?.role?.uppercase() == "ADMIN" || currentUser == null) {
+                                    { onUnlinkDependent(dependent) }
+                                } else null,
                             )
                         }
                     }

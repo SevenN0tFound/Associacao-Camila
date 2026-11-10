@@ -17,11 +17,11 @@ interface UserRepository {
     fun getPendingUsers(): Flow<List<User>>
     fun getApprovedUsers(): Flow<List<User>>
     suspend fun getAvailableStudents(): Result<List<User>>
-    suspend fun linkDependentToGuardian(guardianId: String, student: User): Result<Unit>
-    suspend fun unlinkDependent(guardianId: String, dependentId: String): Result<Unit>
+    suspend fun linkDependentToGuardian(guardianId: String, student: User, requesterRole: String? = null): Result<Unit>
+    suspend fun unlinkDependent(guardianId: String, dependentId: String, requesterRole: String? = null): Result<Unit>
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
     suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
-    suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit>
+    suspend fun addDependentToUser(userId: String, dependent: Dependent, requesterRole: String? = null): Result<Unit>
     suspend fun getUser(userId: String): Result<User>
 }
 
@@ -85,7 +85,20 @@ class UserRepositoryImpl(
         }
     }
 
-    override suspend fun linkDependentToGuardian(guardianId: String, student: User): Result<Unit> = runCatching {
+    override suspend fun linkDependentToGuardian(
+        guardianId: String,
+        student: User,
+        requesterRole: String?,
+    ): Result<Unit> = runCatching {
+        val role = requesterRole ?: run {
+            val authUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            if (authUid != null) {
+                usersCollection.document(authUid).get().await().getString("role")
+            } else null
+        }
+        if (role != null && role.uppercase() != "ADMIN") {
+            error("Acesso negado: apenas administradores podem vincular dependentes.")
+        }
         val dependent = Dependent(
             id = student.id,
             name = student.name,
@@ -112,7 +125,20 @@ class UserRepositoryImpl(
             .await()
     }
 
-    override suspend fun unlinkDependent(guardianId: String, dependentId: String): Result<Unit> = runCatching {
+    override suspend fun unlinkDependent(
+        guardianId: String,
+        dependentId: String,
+        requesterRole: String?,
+    ): Result<Unit> = runCatching {
+        val role = requesterRole ?: run {
+            val authUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            if (authUid != null) {
+                usersCollection.document(authUid).get().await().getString("role")
+            } else null
+        }
+        if (role != null && role.uppercase() != "ADMIN") {
+            error("Acesso negado: apenas administradores podem desvincular dependentes.")
+        }
         val doc = usersCollection.document(guardianId).get().await()
         val user = doc.toObject(User::class.java)
         if (user != null) {
@@ -129,25 +155,37 @@ class UserRepositoryImpl(
         }
     }
 
-    override suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit> =
-        runCatching {
-            val dependentData = mapOf(
-                "id" to dependent.id,
-                "name" to dependent.name,
-                "birthDate" to dependent.birthDate,
-                "relationship" to dependent.relationship,
-                "medicalNotes" to dependent.medicalNotes,
-                "enrolledWorkshopIds" to dependent.enrolledWorkshopIds,
-            )
-            usersCollection.document(userId)
-                .update(
-                    mapOf(
-                        "dependents" to FieldValue.arrayUnion(dependentData),
-                        "associatedStudentIds" to FieldValue.arrayUnion(dependent.id),
-                    )
-                )
-                .await()
+    override suspend fun addDependentToUser(
+        userId: String,
+        dependent: Dependent,
+        requesterRole: String?,
+    ): Result<Unit> = runCatching {
+        val role = requesterRole ?: run {
+            val authUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            if (authUid != null) {
+                usersCollection.document(authUid).get().await().getString("role")
+            } else null
         }
+        if (role != null && role.uppercase() != "ADMIN") {
+            error("Acesso negado: apenas administradores podem vincular dependentes.")
+        }
+        val dependentData = mapOf(
+            "id" to dependent.id,
+            "name" to dependent.name,
+            "birthDate" to dependent.birthDate,
+            "relationship" to dependent.relationship,
+            "medicalNotes" to dependent.medicalNotes,
+            "enrolledWorkshopIds" to dependent.enrolledWorkshopIds,
+        )
+        usersCollection.document(userId)
+            .update(
+                mapOf(
+                    "dependents" to FieldValue.arrayUnion(dependentData),
+                    "associatedStudentIds" to FieldValue.arrayUnion(dependent.id),
+                )
+            )
+            .await()
+    }
 
     override suspend fun getUser(userId: String): Result<User> = runCatching {
         require(userId.isNotBlank()) { "ID do usuário não pode ser vazio." }

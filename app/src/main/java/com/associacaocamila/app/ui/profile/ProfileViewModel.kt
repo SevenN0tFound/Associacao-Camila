@@ -102,11 +102,23 @@ class ProfileViewModel(
     fun linkStudentAsDependent(
         guardian: User,
         student: User,
+        currentUser: User? = null,
         onSuccess: (User) -> Unit = {},
     ) {
+        val requesterRole = currentUser?.role?.uppercase() ?: guardian.role.uppercase()
+        if (requesterRole != "ADMIN") {
+            _uiState.update {
+                it.copy(
+                    isLinkingDependent = false,
+                    errorMessage = "Acesso negado: apenas administradores podem vincular dependentes.",
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLinkingDependent = true, errorMessage = null, successMessage = null) }
-            userRepository.linkDependentToGuardian(guardian.id, student)
+            userRepository.linkDependentToGuardian(guardian.id, student, requesterRole)
                 .onSuccess {
                     val newDependent = com.associacaocamila.app.data.model.Dependent(
                         id = student.id,
@@ -144,11 +156,22 @@ class ProfileViewModel(
         guardian: User,
         dependentId: String,
         dependentName: String = "",
+        currentUser: User? = null,
         onSuccess: (User) -> Unit = {},
     ) {
+        val requesterRole = currentUser?.role?.uppercase() ?: guardian.role.uppercase()
+        if (requesterRole != "ADMIN") {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "Acesso negado: apenas administradores podem desvincular dependentes.",
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(errorMessage = null, successMessage = null) }
-            userRepository.unlinkDependent(guardian.id, dependentId)
+            userRepository.unlinkDependent(guardian.id, dependentId, requesterRole)
                 .onSuccess {
                     val updatedUser = guardian.copy(
                         dependents = guardian.dependents.filterNot { it.id == dependentId },

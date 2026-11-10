@@ -120,7 +120,7 @@ class AdminApprovalsViewModel(
         viewModelScope.launch {
             _isAddingDependent.value = true
             _actionError.value = null
-            repository.linkDependentToGuardian(guardianId, student)
+            repository.linkDependentToGuardian(guardianId, student, "ADMIN")
                 .onSuccess {
                     _feedbackMessage.value = "Participante ${student.name} vinculado com sucesso!"
                     onSuccess()
@@ -141,7 +141,7 @@ class AdminApprovalsViewModel(
     ) {
         viewModelScope.launch {
             _actionError.value = null
-            repository.unlinkDependent(guardianId, dependentId)
+            repository.unlinkDependent(guardianId, dependentId, "ADMIN")
                 .onSuccess {
                     _feedbackMessage.value = if (dependentName.isNotBlank()) {
                         "Participante $dependentName desvinculado com sucesso."
@@ -179,7 +179,7 @@ class AdminApprovalsViewModel(
                 relationship = relationship.trim().ifBlank { "Filho(a)" },
                 medicalNotes = medicalNotes.trim(),
             )
-            repository.addDependentToUser(userId, dependent)
+            repository.addDependentToUser(userId, dependent, "ADMIN")
                 .onSuccess {
                     _feedbackMessage.value = "Dependente ${dependent.name} vinculado com sucesso!"
                     onSuccess()

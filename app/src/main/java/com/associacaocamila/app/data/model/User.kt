@@ -22,7 +22,9 @@ enum class UserRole {
     ADMIN,
     PROFESSOR,
     RESPONSAVEL,
-    ALUNO
+    ALUNO;
+
+    fun uppercase(): String = name.uppercase()
 }
 
 enum class UserStatus {

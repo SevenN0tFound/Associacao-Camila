@@ -72,10 +72,11 @@ import com.associacaocamila.app.ui.theme.CamilaOrange
 @Composable
 fun DependentsSection(
     dependents: List<Dependent>,
-    onLinkStudentClick: () -> Unit,
-    onUnlinkDependentClick: (Dependent) -> Unit,
+    onLinkStudentClick: () -> Unit = {},
+    onUnlinkDependentClick: (Dependent) -> Unit = {},
     modifier: Modifier = Modifier,
-    canEdit: Boolean = true,
+    currentUser: User? = null,
+    canEdit: Boolean = (currentUser?.role?.uppercase() == "ADMIN"),
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -125,7 +126,9 @@ fun DependentsSection(
                     }
                 }
 
-                if (canEdit) {
+                // 1. Verificação de Papel (Role-Based Access):
+                // Apenas ADMIN pode visualizar e acionar a ação de vincular dependente
+                if (currentUser?.role?.uppercase() == "ADMIN" && canEdit) {
                     Button(
                         onClick = onLinkStudentClick,
                         colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
@@ -137,13 +140,13 @@ fun DependentsSection(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PersonAdd,
-                            contentDescription = "Vincular Participante",
+                            contentDescription = "Vincular Dependente",
                             tint = Color.White,
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Vincular",
+                            text = "Vincular Dependente",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White,
                         )
@@ -151,6 +154,8 @@ fun DependentsSection(
                 }
             }
 
+            // 2. Visão do Responsável (RESPONSAVEL):
+            // Visualização em modo somente leitura e mensagem informativa amigável se vazio
             if (dependents.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -161,9 +166,15 @@ fun DependentsSection(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Nenhum dependente vinculado a este responsável.",
+                        text = if (currentUser?.role?.uppercase() == "ADMIN") {
+                            "Nenhum dependente vinculado a este responsável."
+                        } else {
+                            "Nenhum dependente vinculado. Para cadastrar um aluno ou filho, solicite à coordenação da Associação Camila."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = CamilaGray,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp,
                     )
                 }
             } else {
@@ -171,7 +182,7 @@ fun DependentsSection(
                     dependents.forEach { dependent ->
                         LinkedDependentCard(
                             dependent = dependent,
-                            canUnlink = canEdit,
+                            canUnlink = currentUser?.role?.uppercase() == "ADMIN",
                             onUnlink = { onUnlinkDependentClick(dependent) },
                         )
                     }
