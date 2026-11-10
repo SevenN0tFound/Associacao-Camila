@@ -354,6 +354,8 @@ class AttendanceViewModel(
 
     fun exportAttendancePdf(
         context: Context,
+        startDateMillis: Long,
+        endDateMillis: Long,
         teacherName: String = "Professor(a)",
     ) {
         val workshop = _uiState.value.selectedWorkshop ?: run {
@@ -364,14 +366,33 @@ class AttendanceViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isExportingPdf = true, errorMessage = null) }
             repository.getAttendanceRecordsForWorkshop(workshop.id)
-                .onSuccess { records ->
+                .onSuccess { allRecords ->
+                    val startOfPeriod = getStartOfDayMillis(startDateMillis)
+                    val endOfPeriod = getEndOfDayMillis(endDateMillis)
+
+                    val filteredRecords = allRecords.filter { record ->
+                        record.dateMillis in startOfPeriod..endOfPeriod
+                    }.sortedBy { it.dateMillis }
+
+                    if (filteredRecords.isEmpty()) {
+                        _uiState.update {
+                            it.copy(
+                                isExportingPdf = false,
+                                errorMessage = "Nenhum registro de frequência encontrado neste período."
+                            )
+                        }
+                        return@onSuccess
+                    }
+
                     runCatching {
                         val studentsMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
                         val file = WorkshopReportPdfGenerator.generateAttendancePdf(
                             context = context,
                             workshop = workshop,
-                            records = records,
+                            records = filteredRecords,
                             studentsMap = studentsMap,
+                            startDateMillis = startOfPeriod,
+                            endDateMillis = endOfPeriod,
                             teacherName = teacherName,
                         )
                         _uiState.update { it.copy(isExportingPdf = false) }
@@ -394,6 +415,26 @@ class AttendanceViewModel(
                     }
                 }
         }
+    }
+
+    private fun getStartOfDayMillis(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun getEndOfDayMillis(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
     }
 
     fun clearMessages() {

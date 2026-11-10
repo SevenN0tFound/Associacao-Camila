@@ -31,13 +31,15 @@ object WorkshopReportPdfGenerator {
     private val COLOR_BORDER = Color.parseColor("#E0E0E0")
 
     /**
-     * Gera o relatório de frequência em PDF para a oficina selecionada.
+     * Gera o relatório de frequência em PDF para a oficina selecionada com suporte a período customizado.
      */
     suspend fun generateAttendancePdf(
         context: Context,
         workshop: Workshop,
         records: List<AttendanceRecord>,
         studentsMap: Map<String, String>,
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null,
         teacherName: String = "Professor(a)",
         scheduleInfo: String = "Encontros Semanais",
     ): File = withContext(Dispatchers.IO) {
@@ -63,43 +65,52 @@ object WorkshopReportPdfGenerator {
         canvas.drawText("Relatório de Frequência da Oficina", 28f, 54f, textPaint)
 
         // Faixa com Data de Emissão à direita no topo
-        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR"))
-        val emitDateStr = "Emissão: ${dateFormat.format(Date())}"
+        val emitDateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR"))
+        val emitDateStr = "Emissão: ${emitDateFormat.format(Date())}"
         textPaint.textSize = 10f
         val dateWidth = textPaint.measureText(emitDateStr)
         canvas.drawText(emitDateStr, PAGE_WIDTH - 28f - dateWidth, 42f, textPaint)
 
-        // 2. Bloco de Metadados da Oficina
-        var currentY = 100f
+        // 2. Bloco de Metadados da Oficina e Período
+        var currentY = 96f
+        val blockHeight = 92f
         paint.color = Color.parseColor("#F8F9FA")
-        canvas.drawRoundRect(24f, currentY, PAGE_WIDTH - 24f, currentY + 74f, 8f, 8f, paint)
+        canvas.drawRoundRect(24f, currentY, PAGE_WIDTH - 24f, currentY + blockHeight, 8f, 8f, paint)
 
         textPaint.color = COLOR_PRIMARY_DARK
-        textPaint.textSize = 14f
+        textPaint.textSize = 13.5f
         textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Oficina: ${workshop.name}", 38f, currentY + 24f, textPaint)
+        canvas.drawText("Oficina: ${workshop.name}", 38f, currentY + 22f, textPaint)
+
+        // Formatação do período do relatório
+        val periodDateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("pt-BR"))
+        val periodText = if (startDateMillis != null && endDateMillis != null) {
+            "Período: ${periodDateFormat.format(Date(startDateMillis))} a ${periodDateFormat.format(Date(endDateMillis))}"
+        } else {
+            "Período: Histórico Completo"
+        }
 
         textPaint.color = Color.BLACK
-        textPaint.textSize = 10.5f
+        textPaint.textSize = 10f
         textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        canvas.drawText("Instrutor(a): $teacherName", 38f, currentY + 44f, textPaint)
-        canvas.drawText("Horários/Dias: $scheduleInfo", 38f, currentY + 62f, textPaint)
+        canvas.drawText("Instrutor(a): $teacherName", 38f, currentY + 42f, textPaint)
+        canvas.drawText(periodText, 38f, currentY + 60f, textPaint)
+        canvas.drawText("Horários/Dias: $scheduleInfo", 38f, currentY + 78f, textPaint)
 
         val totalClasses = records.size
-        val totalClassesStr = "Total de Aulas Registradas: $totalClasses"
+        val totalClassesStr = "Total de Aulas no Período: $totalClasses"
         val totalClassesWidth = textPaint.measureText(totalClassesStr)
-        canvas.drawText(totalClassesStr, PAGE_WIDTH - 38f - totalClassesWidth, currentY + 44f, textPaint)
+        canvas.drawText(totalClassesStr, PAGE_WIDTH - 38f - totalClassesWidth, currentY + 42f, textPaint)
 
         val totalStudentsStr = "Participantes Matriculados: ${workshop.enrolledStudentIds.size}"
         val totalStudentsWidth = textPaint.measureText(totalStudentsStr)
-        canvas.drawText(totalStudentsStr, PAGE_WIDTH - 38f - totalStudentsWidth, currentY + 62f, textPaint)
+        canvas.drawText(totalStudentsStr, PAGE_WIDTH - 38f - totalStudentsWidth, currentY + 60f, textPaint)
 
-        currentY += 95f
+        currentY += blockHeight + 20f
 
         // 3. Tabela de Frequência
         val startX = 24f
         val endX = PAGE_WIDTH - 24f
-        val tableWidth = endX - startX
 
         // Cabeçalho da Tabela
         val headerHeight = 28f
@@ -140,7 +151,7 @@ object WorkshopReportPdfGenerator {
             enrolledIds.forEachIndexed { index, studentId ->
                 val studentName = studentsMap[studentId] ?: "Aluno ($studentId)"
 
-                // Cálculo de presenças e faltas para o participante
+                // Cálculo de presenças e faltas estritamente baseado nos registros filtrados do período
                 var presenceCount = 0
                 var absenceCount = 0
 

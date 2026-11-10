@@ -43,6 +43,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -59,6 +62,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -86,8 +90,10 @@ import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @Composable
 fun AttendanceScreen(
@@ -126,7 +132,9 @@ fun AttendanceScreen(
             onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
             onSubmitAttendance = { viewModel.submitAttendance(teacherId, context) },
-            onExportPdf = { viewModel.exportAttendancePdf(context) },
+            onExportPdf = { startMillis, endMillis ->
+                viewModel.exportAttendancePdf(context, startMillis, endMillis)
+            },
         )
 
         SnackbarHost(
@@ -147,7 +155,7 @@ fun AttendanceContent(
     onSetAttendance: (String, Boolean) -> Unit,
     onMarkAll: (Boolean) -> Unit,
     onSubmitAttendance: () -> Unit,
-    onExportPdf: () -> Unit = {},
+    onExportPdf: (startDateMillis: Long, endDateMillis: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (uiState.isLoadingWorkshops) {
@@ -171,11 +179,13 @@ fun AttendanceContent(
     }
 
     val isTodayDate = remember(uiState.selectedDateMillis) {
-        val cal1 = java.util.Calendar.getInstance().apply { timeInMillis = uiState.selectedDateMillis }
-        val cal2 = java.util.Calendar.getInstance()
-        cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
-                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR)
+        val cal1 = Calendar.getInstance().apply { timeInMillis = uiState.selectedDateMillis }
+        val cal2 = Calendar.getInstance()
+        cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
+
+    var showDateRangeDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -345,9 +355,9 @@ fun AttendanceContent(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Botão Exportar Frequência (PDF)
+            // Botão Exportar Frequência (PDF) com seleção de período
             OutlinedButton(
-                onClick = onExportPdf,
+                onClick = { showDateRangeDialog = true },
                 enabled = !uiState.isExportingPdf && uiState.selectedWorkshop != null,
                 modifier = Modifier
                     .weight(1f)
@@ -426,6 +436,17 @@ fun AttendanceContent(
                     }
                 }
             }
+        }
+
+        // Modal de Seleção de Período para o Relatório de Frequência
+        if (showDateRangeDialog) {
+            DateRangeReportPickerDialog(
+                onDismiss = { showDateRangeDialog = false },
+                onConfirm = { startMillis, endMillis ->
+                    showDateRangeDialog = false
+                    onExportPdf(startMillis, endMillis)
+                }
+            )
         }
     }
 }
@@ -1076,7 +1097,139 @@ private fun AttendanceContentPreview() {
             onSetAttendance = { _, _ -> },
             onMarkAll = {},
             onSubmitAttendance = {},
-            onExportPdf = {},
+            onExportPdf = { _, _ -> },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateRangeReportPickerDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (startMillis: Long, endMillis: Long) -> Unit,
+) {
+    val dateRangePickerState = rememberDateRangePickerState()
+
+    val formattedRange = remember(
+        dateRangePickerState.selectedStartDateMillis,
+        dateRangePickerState.selectedEndDateMillis
+    ) {
+        val startUtc = dateRangePickerState.selectedStartDateMillis
+        val endUtc = dateRangePickerState.selectedEndDateMillis
+        if (startUtc != null && endUtc != null) {
+            val format = SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("pt-BR")).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            "${format.format(Date(startUtc))} até ${format.format(Date(endUtc))}"
+        } else if (startUtc != null) {
+            val format = SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("pt-BR")).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            "${format.format(Date(startUtc))} até ... (selecione data final)"
+        } else {
+            "Nenhum período selecionado"
+        }
+    }
+
+    val isRangeValid = dateRangePickerState.selectedStartDateMillis != null &&
+            dateRangePickerState.selectedEndDateMillis != null
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    val startUtc = dateRangePickerState.selectedStartDateMillis
+                    val endUtc = dateRangePickerState.selectedEndDateMillis
+                    if (startUtc != null && endUtc != null) {
+                        val utcCalStart = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = startUtc }
+                        val localCalStart = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, utcCalStart.get(Calendar.YEAR))
+                            set(Calendar.MONTH, utcCalStart.get(Calendar.MONTH))
+                            set(Calendar.DAY_OF_MONTH, utcCalStart.get(Calendar.DAY_OF_MONTH))
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+
+                        val utcCalEnd = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = endUtc }
+                        val localCalEnd = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, utcCalEnd.get(Calendar.YEAR))
+                            set(Calendar.MONTH, utcCalEnd.get(Calendar.MONTH))
+                            set(Calendar.DAY_OF_MONTH, utcCalEnd.get(Calendar.DAY_OF_MONTH))
+                            set(Calendar.HOUR_OF_DAY, 23)
+                            set(Calendar.MINUTE, 59)
+                            set(Calendar.SECOND, 59)
+                            set(Calendar.MILLISECOND, 999)
+                        }
+
+                        onConfirm(localCalStart.timeInMillis, localCalEnd.timeInMillis)
+                    }
+                },
+                enabled = isRangeValid,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CamilaGreen,
+                    disabledContainerColor = CamilaGreen.copy(alpha = 0.4f)
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    text = "Gerar PDF",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "Cancelar",
+                    color = CamilaGray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        colors = DatePickerDefaults.colors(
+            containerColor = Color.White
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                color = BackgroundLight,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Text(
+                        text = "Selecionar Período do Relatório",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreenDark
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Intervalo selecionado: $formattedRange",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (isRangeValid) CamilaOrange else CamilaGray
+                    )
+                }
+            }
+
+            DateRangePicker(
+                state = dateRangePickerState,
+                title = null,
+                headline = null,
+                showModeToggle = false,
+                colors = DatePickerDefaults.colors(
+                    selectedDayContainerColor = CamilaGreen,
+                    selectedDayContentColor = Color.White,
+                    dayInSelectionRangeContainerColor = CamilaGreen.copy(alpha = 0.15f),
+                    dayInSelectionRangeContentColor = CamilaGreenDark,
+                    todayDateBorderColor = CamilaOrange,
+                    todayContentColor = CamilaOrange
+                ),
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
