@@ -34,6 +34,11 @@ O sistema foi concebido para eliminar processos manuais em papel, garantir integ
 - **Sessão Persistente:** Auto-login mantido via Firebase Authentication até ação explícita de encerramento de sessão (*Sign Out*).
 - **Controle de Acesso Baseado em Perfis (RBAC):** Restrições dinâmicas de interface e permissões de dados (Admin, Professor, Responsável/Aluno).
 
+### 📢 Mural de Avisos Comunitários
+- **Comunicação em Tempo Real:** Publicação de comunicados, recessos e eventos diretamente na Home.
+- **Categorização Visual:** Sinalização por etiquetas temáticas (Geral, Recesso, Evento e Urgente).
+- **Gestão Simplificada:** Criação e exclusão restritas à coordenação e docentes.
+
 ---
 
 ## 🛠️ Tecnologias Utilizadas
