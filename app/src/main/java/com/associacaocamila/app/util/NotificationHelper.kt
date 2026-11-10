@@ -9,16 +9,24 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.associacaocamila.app.MainActivity
 import com.associacaocamila.app.R
 
+/**
+ * Utilitário institucional para gerenciamento e disparo de notificações locais nativas.
+ */
 object NotificationHelper {
 
+    const val CHANNEL_ALERTS_ID = "camila_alerts_channel"
     const val CHANNEL_ATTENDANCE_ID = "channel_attendance"
     const val CHANNEL_REMINDERS_ID = "channel_reminders"
+
+    private const val CHANNEL_ALERTS_NAME = "Avisos da Associação Camila"
+    private const val CHANNEL_ALERTS_DESC = "Notificações sobre frequência, recados e avisos institucionais"
 
     private const val CHANNEL_ATTENDANCE_NAME = "Avisos de Frequência"
     private const val CHANNEL_REMINDERS_NAME = "Lembretes de Atividades"
@@ -27,9 +35,34 @@ object NotificationHelper {
     private val COLOR_GREEN = Color.parseColor("#00A669")
 
     /**
-     * Inicializa os canais de notificação no Android 8.0 (API 26) ou superior.
+     * Inicializa o canal principal de notificações institucionais com IMPORTANCE_HIGH.
+     */
+    fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+
+            val alertsChannel = NotificationChannel(
+                CHANNEL_ALERTS_ID,
+                CHANNEL_ALERTS_NAME,
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = CHANNEL_ALERTS_DESC
+                enableLights(true)
+                lightColor = COLOR_GREEN
+                enableVibration(true)
+            }
+
+            notificationManager.createNotificationChannel(alertsChannel)
+        }
+    }
+
+    /**
+     * Inicializa todos os canais de notificação no Android 8.0 (API 26) ou superior.
      */
     fun createNotificationChannels(context: Context) {
+        createNotificationChannel(context)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
@@ -59,6 +92,64 @@ object NotificationHelper {
 
             notificationManager.createNotificationChannel(attendanceChannel)
             notificationManager.createNotificationChannel(remindersChannel)
+        }
+    }
+
+    /**
+     * Dispara notificação local nativa com título, mensagem, som, vibração e ícone padrão.
+     */
+    fun showLocalNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 1,
+    ) {
+        // Assegura a existência do canal antes de disparar
+        createNotificationChannel(context)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val smallIcon = try {
+            R.drawable.ic_launcher_foreground
+        } catch (_: Exception) {
+            android.R.drawable.ic_dialog_info
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
+            .setSmallIcon(smallIcon)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setColor(COLOR_GREEN)
+            .setAutoCancel(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (_: SecurityException) {
+            // Permissão não concedida
         }
     }
 
@@ -162,7 +253,7 @@ object NotificationHelper {
      */
     fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
+            ActivityCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED

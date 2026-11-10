@@ -323,9 +323,18 @@ class AttendanceViewModel(
                         )
                     }
 
-                    // Dispara alerta local para cada participante que recebeu falta
+                    // Dispara alerta local se houver faltas registradas na oficina
                     if (context != null) {
                         val absentIds = record.attendanceMap.filterValues { !it }.keys
+                        if (absentIds.isNotEmpty()) {
+                            NotificationHelper.showLocalNotification(
+                                context = context,
+                                title = "Registro de Frequência Concluído",
+                                message = "A chamada foi salva. Atenção: existem ausências registradas nesta oficina.",
+                                notificationId = 1,
+                            )
+                        }
+
                         val participantMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
 
                         absentIds.forEach { absentId ->

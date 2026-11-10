@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import android.Manifest
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -142,6 +146,7 @@ import com.associacaocamila.app.ui.theme.CamilaGray
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
+import com.associacaocamila.app.util.NotificationHelper
 import kotlinx.coroutines.launch
 
 /**
@@ -181,17 +186,17 @@ fun HomeScreen(
     val context = LocalContext.current
 
     // Solicitação elegante de permissão para notificações locais (Android 13+)
-    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
     ) { /* Permissão concedida ou negada */ }
 
     LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (!com.associacaocamila.app.util.NotificationHelper.hasNotificationPermission(context)) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!NotificationHelper.hasNotificationPermission(context)) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-        com.associacaocamila.app.util.NotificationHelper.createNotificationChannels(context)
+        NotificationHelper.createNotificationChannels(context)
     }
 
     val navItems = remember(userState.role) {
@@ -1446,6 +1451,7 @@ private fun NotificationsBottomSheet(
     onMarkAsRead: (String) -> Unit,
     onMarkAllAsRead: () -> Unit,
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val unreadCount = notices.count { !readNoticeIds.contains(it.id) }
 
@@ -1504,11 +1510,41 @@ private fun NotificationsBottomSheet(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (unreadCount > 0) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+            // Barra de ações: Teste de Notificação Local & Marcar todas como lidas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        NotificationHelper.showLocalNotification(
+                            context = context,
+                            title = "Associação Camila - Teste",
+                            message = "Notificação local de teste disparada com sucesso no seu dispositivo!",
+                            notificationId = 999,
+                        )
+                        Toast.makeText(context, "Notificação de teste disparada!", Toast.LENGTH_SHORT).show()
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, CamilaGreen.copy(alpha = 0.4f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CamilaGreenDark),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = CamilaGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Testar Notificação Local",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
+
+                if (unreadCount > 0) {
                     TextButton(
                         onClick = onMarkAllAsRead,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
@@ -1521,7 +1557,7 @@ private fun NotificationsBottomSheet(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Marcar todas como lidas",
+                            text = "Marcar todas",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = CamilaGreen
                         )
@@ -1529,6 +1565,7 @@ private fun NotificationsBottomSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(6.dp))
             HorizontalDivider(color = BackgroundLight)
             Spacer(modifier = Modifier.height(12.dp))
 
