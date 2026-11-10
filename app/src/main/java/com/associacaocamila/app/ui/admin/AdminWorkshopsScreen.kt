@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
@@ -58,6 +59,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -74,6 +77,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -88,6 +92,11 @@ import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
 import com.associacaocamila.app.ui.theme.CamilaGray
+import com.associacaocamila.app.util.NotificationHelper
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
@@ -115,12 +124,32 @@ fun AdminWorkshopsScreen(
         }
     }
 
+    val context = LocalContext.current
+
     AdminWorkshopsContent(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
         onSeedMockData = { viewModel.seedMockWorkshops() },
-        onCreateWorkshop = { name, desc, teacherId, participants, onSuccess ->
-            viewModel.createWorkshop(name, desc, teacherId, participants, onSuccess)
+        onCreateWorkshop = { name, desc, teacherId, participants, isOpen, deadline, maxCap, onSuccess ->
+            viewModel.createWorkshop(
+                name = name,
+                description = desc,
+                teacherId = teacherId,
+                selectedStudentIds = participants,
+                isRegistrationOpen = isOpen,
+                registrationDeadline = deadline,
+                maxCapacity = maxCap,
+                onSuccess = {
+                    if (isOpen) {
+                        NotificationHelper.showNotification(
+                            context = context,
+                            title = "Inscrições Abertas!",
+                            message = "A oficina $name está com vagas abertas. Inscreva-se pelo app!"
+                        )
+                    }
+                    onSuccess()
+                }
+            )
         },
         onEditClick = { viewModel.selectWorkshopForEdit(it) },
         onDismissEdit = { viewModel.selectWorkshopForEdit(null) },
@@ -139,7 +168,7 @@ fun AdminWorkshopsContent(
     uiState: AdminWorkshopsUiState,
     snackbarHostState: SnackbarHostState,
     onSeedMockData: () -> Unit,
-    onCreateWorkshop: (String, String, String, List<String>, () -> Unit) -> Unit,
+    onCreateWorkshop: (String, String, String, List<String>, Boolean, Long?, Int, () -> Unit) -> Unit,
     onEditClick: (Workshop) -> Unit,
     onDismissEdit: () -> Unit,
     onSaveWorkshopEdit: (Workshop) -> Unit,
@@ -381,8 +410,8 @@ fun AdminWorkshopsContent(
                     showCreateBottomSheet = false
                 }
             },
-            onCreate = { name, desc, teacherId, participants ->
-                onCreateWorkshop(name, desc, teacherId, participants) {
+            onCreate = { name, desc, teacherId, participants, isOpen, deadline, maxCap ->
+                onCreateWorkshop(name, desc, teacherId, participants, isOpen, deadline, maxCap) {
                     coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                         showCreateBottomSheet = false
                     }
@@ -595,6 +624,55 @@ private fun WorkshopAdminCard(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Badges de Status de Inscrição e Vagas
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val isOpen = workshop.isCurrentlyOpen()
+                Surface(
+                    color = if (isOpen) CamilaGreen.copy(alpha = 0.12f) else CamilaOrange.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = if (isOpen) "Inscrições Abertas" else "Inscrições Encerradas",
+                        color = if (isOpen) CamilaGreenDark else CamilaOrange,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                if (workshop.registrationDeadline != null) {
+                    Surface(
+                        color = CamilaGray.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Prazo: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(workshop.registrationDeadline))}",
+                            color = CamilaGray,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (workshop.maxCapacity > 0) {
+                    Surface(
+                        color = if (workshop.isFull()) CamilaOrange.copy(alpha = 0.12f) else CamilaGreen.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = if (workshop.isFull()) "Lotada (${workshop.maxCapacity})" else "${workshop.enrolledStudentIds.size}/${workshop.maxCapacity} vagas",
+                            color = if (workshop.isFull()) CamilaOrange else CamilaGreenDark,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -606,12 +684,17 @@ private fun CreateWorkshopBottomSheet(
     participants: List<EligibleParticipant>,
     isCreating: Boolean,
     onDismiss: () -> Unit,
-    onCreate: (String, String, String, List<String>) -> Unit,
+    onCreate: (String, String, String, List<String>, Boolean, Long?, Int) -> Unit,
 ) {
+    val context = LocalContext.current
     var name by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var selectedTeacherId by rememberSaveable { mutableStateOf(teachers.firstOrNull()?.id.orEmpty()) }
     var teacherDropdownExpanded by remember { mutableStateOf(false) }
+
+    var isRegistrationOpen by rememberSaveable { mutableStateOf(true) }
+    var registrationDeadline by rememberSaveable { mutableStateOf<Long?>(null) }
+    var maxCapacityText by rememberSaveable { mutableStateOf("") }
 
     val uniqueParticipants = remember(participants) {
         participants.distinctBy { it.id }.distinctBy { it.name.trim().lowercase() }
@@ -739,6 +822,138 @@ private fun CreateWorkshopBottomSheet(
                             )
                         }
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Controle de Inscrições e Vagas
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = BackgroundLight)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Inscrições Abertas",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isRegistrationOpen) "Alunos e responsáveis podem se inscrever" else "Inscrições desativadas para esta turma",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = CamilaGray
+                            )
+                        }
+                        Switch(
+                            checked = isRegistrationOpen,
+                            onCheckedChange = { isRegistrationOpen = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = CamilaGreen,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = CamilaGray.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Data limite para encerramento automático
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Data Limite de Encerramento",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = registrationDeadline?.let {
+                                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))
+                                } ?: "Sem prazo automático (encerramento manual)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (registrationDeadline != null) CamilaOrange else CamilaGray
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (registrationDeadline != null) {
+                                IconButton(onClick = { registrationDeadline = null }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Limpar data limite",
+                                        tint = CamilaOrange,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val calendar = Calendar.getInstance().apply {
+                                        registrationDeadline?.let { timeInMillis = it }
+                                    }
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val selectedCal = Calendar.getInstance().apply {
+                                                set(Calendar.YEAR, y)
+                                                set(Calendar.MONTH, m)
+                                                set(Calendar.DAY_OF_MONTH, d)
+                                                set(Calendar.HOUR_OF_DAY, 23)
+                                                set(Calendar.MINUTE, 59)
+                                                set(Calendar.SECOND, 59)
+                                                set(Calendar.MILLISECOND, 999)
+                                            }
+                                            registrationDeadline = selectedCal.timeInMillis
+                                        },
+                                        calendar.get(Calendar.YEAR),
+                                        calendar.get(Calendar.MONTH),
+                                        calendar.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CamilaGreen.copy(alpha = 0.15f),
+                                    contentColor = CamilaGreenDark
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (registrationDeadline != null) "Alterar" else "Definir Prazo",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Capacidade Máxima
+                    OutlinedTextField(
+                        value = maxCapacityText,
+                        onValueChange = { maxCapacityText = it.filter { char -> char.isDigit() } },
+                        label = { Text("Capacidade Máxima de Alunos (Opcional)") },
+                        placeholder = { Text("0 = ilimitado") },
+                        singleLine = true,
+                        colors = outlinedFieldColors(),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -873,7 +1088,10 @@ private fun CreateWorkshopBottomSheet(
                         name,
                         description,
                         selectedTeacherId,
-                        selectedStudentIds.toList()
+                        selectedStudentIds.toList(),
+                        isRegistrationOpen,
+                        registrationDeadline,
+                        maxCapacityText.toIntOrNull() ?: 0
                     )
                 },
                 enabled = !isCreating && name.isNotBlank(),
@@ -916,12 +1134,19 @@ private fun EditWorkshopBottomSheet(
     onDismiss: () -> Unit,
     onSave: (Workshop) -> Unit,
 ) {
+    val context = LocalContext.current
     var name by rememberSaveable(workshop.id) { mutableStateOf(workshop.name) }
     var description by rememberSaveable(workshop.id) { mutableStateOf(workshop.description) }
     var selectedTeacherId by rememberSaveable(workshop.id) {
         mutableStateOf(workshop.teacherId.ifBlank { teachers.firstOrNull()?.id.orEmpty() })
     }
     var teacherDropdownExpanded by remember { mutableStateOf(false) }
+
+    var isRegistrationOpen by rememberSaveable(workshop.id) { mutableStateOf(workshop.isRegistrationOpen) }
+    var registrationDeadline by rememberSaveable(workshop.id) { mutableStateOf<Long?>(workshop.registrationDeadline) }
+    var maxCapacityText by rememberSaveable(workshop.id) {
+        mutableStateOf(if (workshop.maxCapacity > 0) workshop.maxCapacity.toString() else "")
+    }
 
     val uniqueParticipants = remember(participants) {
         participants.distinctBy { it.id }.distinctBy { it.name.trim().lowercase() }
@@ -1051,6 +1276,138 @@ private fun EditWorkshopBottomSheet(
                             )
                         }
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Controle de Inscrições e Vagas
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = BackgroundLight)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Inscrições Abertas",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isRegistrationOpen) "Alunos e responsáveis podem se inscrever" else "Inscrições desativadas para esta turma",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = CamilaGray
+                            )
+                        }
+                        Switch(
+                            checked = isRegistrationOpen,
+                            onCheckedChange = { isRegistrationOpen = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = CamilaGreen,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = CamilaGray.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Data limite para encerramento automático
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Data Limite de Encerramento",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = registrationDeadline?.let {
+                                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))
+                                } ?: "Sem prazo automático (encerramento manual)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (registrationDeadline != null) CamilaOrange else CamilaGray
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (registrationDeadline != null) {
+                                IconButton(onClick = { registrationDeadline = null }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Limpar data limite",
+                                        tint = CamilaOrange,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val calendar = Calendar.getInstance().apply {
+                                        registrationDeadline?.let { timeInMillis = it }
+                                    }
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val selectedCal = Calendar.getInstance().apply {
+                                                set(Calendar.YEAR, y)
+                                                set(Calendar.MONTH, m)
+                                                set(Calendar.DAY_OF_MONTH, d)
+                                                set(Calendar.HOUR_OF_DAY, 23)
+                                                set(Calendar.MINUTE, 59)
+                                                set(Calendar.SECOND, 59)
+                                                set(Calendar.MILLISECOND, 999)
+                                            }
+                                            registrationDeadline = selectedCal.timeInMillis
+                                        },
+                                        calendar.get(Calendar.YEAR),
+                                        calendar.get(Calendar.MONTH),
+                                        calendar.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CamilaGreen.copy(alpha = 0.15f),
+                                    contentColor = CamilaGreenDark
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (registrationDeadline != null) "Alterar" else "Definir Prazo",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Capacidade Máxima
+                    OutlinedTextField(
+                        value = maxCapacityText,
+                        onValueChange = { maxCapacityText = it.filter { char -> char.isDigit() } },
+                        label = { Text("Capacidade Máxima de Alunos (Opcional)") },
+                        placeholder = { Text("0 = ilimitado") },
+                        singleLine = true,
+                        colors = outlinedFieldColors(),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -1186,7 +1543,10 @@ private fun EditWorkshopBottomSheet(
                             name = name.trim(),
                             description = description.trim(),
                             teacherId = selectedTeacherId.trim(),
-                            enrolledStudentIds = selectedStudentIds.toList()
+                            enrolledStudentIds = selectedStudentIds.toList(),
+                            isRegistrationOpen = isRegistrationOpen,
+                            registrationDeadline = registrationDeadline,
+                            maxCapacity = maxCapacityText.toIntOrNull() ?: 0
                         )
                     )
                 },
@@ -1330,7 +1690,7 @@ private fun AdminWorkshopsScreenPreview() {
             ),
             snackbarHostState = remember { SnackbarHostState() },
             onSeedMockData = {},
-            onCreateWorkshop = { _, _, _, _, _ -> },
+            onCreateWorkshop = { _, _, _, _, _, _, _, _ -> },
             onEditClick = {},
             onDismissEdit = {},
             onSaveWorkshopEdit = {},

@@ -106,6 +106,9 @@ class AdminWorkshopsViewModel(
         description: String,
         teacherId: String,
         selectedStudentIds: List<String>,
+        isRegistrationOpen: Boolean = true,
+        registrationDeadline: Long? = null,
+        maxCapacity: Int = 0,
         onSuccess: () -> Unit = {},
     ) {
         if (name.isBlank()) {
@@ -120,7 +123,10 @@ class AdminWorkshopsViewModel(
                 name = name.trim(),
                 description = description.trim(),
                 teacherId = teacherId.trim(),
-                enrolledStudentIds = selectedStudentIds
+                enrolledStudentIds = selectedStudentIds,
+                isRegistrationOpen = isRegistrationOpen,
+                registrationDeadline = registrationDeadline,
+                maxCapacity = maxCapacity
             )
 
             repository.createWorkshop(newWorkshop)
@@ -140,6 +146,22 @@ class AdminWorkshopsViewModel(
                             errorMessage = error.localizedMessage
                                 ?: "Falha ao criar turma. Tente novamente."
                         )
+                    }
+                }
+        }
+    }
+
+    fun toggleRegistrationStatus(workshopId: String, isOpen: Boolean) {
+        if (workshopId.isBlank()) return
+        viewModelScope.launch {
+            repository.toggleRegistrationStatus(workshopId, isOpen)
+                .onSuccess {
+                    val statusText = if (isOpen) "abertas" else "encerradas"
+                    _uiState.update { it.copy(userMessage = "Inscrições $statusText com sucesso!") }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(errorMessage = error.localizedMessage ?: "Erro ao alterar status de inscrições.")
                     }
                 }
         }

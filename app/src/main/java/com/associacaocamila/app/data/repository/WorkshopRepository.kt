@@ -5,6 +5,7 @@ import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.data.model.Workshop
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,9 @@ interface WorkshopRepository {
     suspend fun createWorkshop(workshop: Workshop): Result<Unit>
     suspend fun updateWorkshop(workshop: Workshop): Result<Unit>
     suspend fun deleteWorkshop(workshopId: String): Result<Unit>
+    suspend fun enrollStudent(workshopId: String, studentId: String): Result<Unit>
+    suspend fun unrollStudent(workshopId: String, studentId: String): Result<Unit>
+    suspend fun toggleRegistrationStatus(workshopId: String, isOpen: Boolean): Result<Unit>
     suspend fun getApprovedTeachers(): Result<List<User>>
     suspend fun getApprovedStudents(): Result<List<User>>
     suspend fun getEligibleParticipants(): Result<List<EligibleParticipant>>
@@ -61,6 +65,32 @@ class WorkshopRepositoryImpl(
     override suspend fun deleteWorkshop(workshopId: String): Result<Unit> = runCatching {
         require(workshopId.isNotBlank()) { "ID da oficina não pode ser vazio para exclusão." }
         workshopsCollection.document(workshopId).delete().await()
+    }
+
+    override suspend fun enrollStudent(workshopId: String, studentId: String): Result<Unit> = runCatching {
+        require(workshopId.isNotBlank()) { "ID da oficina não pode ser vazio." }
+        require(studentId.isNotBlank()) { "ID do aluno não pode ser vazio." }
+        workshopsCollection.document(workshopId).update(
+            "enrolledStudentIds",
+            FieldValue.arrayUnion(studentId)
+        ).await()
+    }
+
+    override suspend fun unrollStudent(workshopId: String, studentId: String): Result<Unit> = runCatching {
+        require(workshopId.isNotBlank()) { "ID da oficina não pode ser vazio." }
+        require(studentId.isNotBlank()) { "ID do aluno não pode ser vazio." }
+        workshopsCollection.document(workshopId).update(
+            "enrolledStudentIds",
+            FieldValue.arrayRemove(studentId)
+        ).await()
+    }
+
+    override suspend fun toggleRegistrationStatus(workshopId: String, isOpen: Boolean): Result<Unit> = runCatching {
+        require(workshopId.isNotBlank()) { "ID da oficina não pode ser vazio." }
+        workshopsCollection.document(workshopId).update(
+            "isRegistrationOpen",
+            isOpen
+        ).await()
     }
 
     override suspend fun getApprovedTeachers(): Result<List<User>> = runCatching {

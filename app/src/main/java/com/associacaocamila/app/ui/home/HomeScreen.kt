@@ -209,6 +209,7 @@ fun HomeScreen(
                 }
                 UserRole.PROFESSOR -> {
                     add(NavigationItem.Chamada)
+                    add(NavigationItem.Turmas)
                     add(NavigationItem.AgendamentoVan)
                 }
                 UserRole.ADMIN -> {
