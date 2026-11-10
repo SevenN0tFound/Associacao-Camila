@@ -399,11 +399,7 @@ fun HomeScreen(
                 when (navItem) {
                     is NavigationItem.Inicio -> InicioTabContent(
                         currentUser = userState,
-                        snackbarHostState = snackbarHostState,
-                        onUserUpdated = { updated ->
-                            userState = updated
-                            onUserUpdated?.invoke(updated)
-                        }
+                        snackbarHostState = snackbarHostState
                     )
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
@@ -436,9 +432,7 @@ private fun InicioTabContent(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState? = null,
     homeViewModel: HomeViewModel? = null,
-    onUserUpdated: ((User) -> Unit)? = null,
 ) {
-    val scope = rememberCoroutineScope()
     val isInspectionMode = LocalInspectionMode.current
     val actualViewModel = if (isInspectionMode) null else (homeViewModel ?: viewModel())
     val uiState = actualViewModel?.uiState?.collectAsState()?.value ?: HomeUiState(
@@ -521,17 +515,7 @@ private fun InicioTabContent(
                 ProfileAvatar(
                     user = currentUser,
                     size = 56.dp,
-                    isEditable = true,
-                    onUserUpdated = onUserUpdated,
-                    onError = { errorMsg ->
-                        scope.launch {
-                            if (snackbarHostState != null) {
-                                snackbarHostState.showSnackbar(errorMsg)
-                            } else {
-                                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+                    isEditable = false
                 )
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
@@ -1454,6 +1438,22 @@ private fun PerfilTabContent(
                 }
 
                 HorizontalDivider(color = CamilaGray.copy(alpha = 0.2f))
+
+                // Avatar Interativo para troca de foto no perfil
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ProfileAvatar(
+                        user = currentUser,
+                        size = 80.dp,
+                        isEditable = true,
+                        onUserUpdated = onUserUpdated,
+                        onError = { errorMsg ->
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
 
                 OutlinedTextField(
                     value = editPhone,

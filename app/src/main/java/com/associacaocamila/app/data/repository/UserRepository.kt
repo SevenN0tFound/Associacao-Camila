@@ -7,7 +7,9 @@ import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -27,7 +29,6 @@ interface UserRepository {
 
 class UserRepositoryImpl(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val storage: FirebaseStorage = FirebaseStorage.getInstance(),
 ) : UserRepository {
 
     private val usersCollection get() = firestore.collection(USERS_COLLECTION)
@@ -151,11 +152,14 @@ class UserRepositoryImpl(
         }
 
     override suspend fun uploadProfilePhoto(userId: String, imageUri: Uri): Result<String> = runCatching {
-        val storagePath = "profile_photos/${userId}.jpg"
-        val storageRef = storage.reference.child(storagePath)
+        require(userId.isNotBlank()) { "ID do usuário não pode ser vazio." }
+        val storageRef = Firebase.storage.reference.child("profile_photos/$userId.jpg")
+        // Aguarda o upload do arquivo ser 100% concluído
         storageRef.putFile(imageUri).await()
+        // Só então busca a URL pública de download
         val downloadUrl = storageRef.downloadUrl.await().toString()
-        usersCollection.document(userId)
+        // Atualiza no Firestore
+        Firebase.firestore.collection(USERS_COLLECTION).document(userId)
             .update("photoUrl", downloadUrl)
             .await()
         downloadUrl

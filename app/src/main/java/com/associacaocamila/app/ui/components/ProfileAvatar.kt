@@ -36,7 +36,6 @@ import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.repository.UserRepository
 import com.associacaocamila.app.data.repository.UserRepositoryImpl
 import com.associacaocamila.app.ui.theme.CamilaGreen
-import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import kotlinx.coroutines.launch
 
 /**
@@ -50,8 +49,9 @@ fun ProfileAvatar(
     user: User,
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
-    isEditable: Boolean = true,
+    isEditable: Boolean = false,
     userRepository: UserRepository = remember { UserRepositoryImpl() },
+    onPhotoSelected: ((Uri) -> Unit)? = null,
     onUserUpdated: ((User) -> Unit)? = null,
     onPhotoUpdated: ((String) -> Unit)? = null,
     onError: ((String) -> Unit)? = null,
@@ -62,20 +62,23 @@ fun ProfileAvatar(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null && user.id.isNotBlank()) {
-            scope.launch {
-                isUploading = true
-                val result = userRepository.uploadProfilePhoto(user.id, uri)
-                isUploading = false
-                if (result.isSuccess) {
-                    val downloadUrl = result.getOrThrow()
-                    onPhotoUpdated?.invoke(downloadUrl)
-                    onUserUpdated?.invoke(user.copy(photoUrl = downloadUrl))
-                } else {
-                    onError?.invoke(
-                        result.exceptionOrNull()?.localizedMessage
-                            ?: "Erro ao realizar upload da foto de perfil."
-                    )
+        if (uri != null) {
+            onPhotoSelected?.invoke(uri)
+            if (user.id.isNotBlank()) {
+                scope.launch {
+                    isUploading = true
+                    val result = userRepository.uploadProfilePhoto(user.id, uri)
+                    isUploading = false
+                    if (result.isSuccess) {
+                        val downloadUrl = result.getOrThrow()
+                        onPhotoUpdated?.invoke(downloadUrl)
+                        onUserUpdated?.invoke(user.copy(photoUrl = downloadUrl))
+                    } else {
+                        onError?.invoke(
+                            result.exceptionOrNull()?.localizedMessage
+                                ?: "Erro ao realizar upload da foto de perfil."
+                        )
+                    }
                 }
             }
         }
