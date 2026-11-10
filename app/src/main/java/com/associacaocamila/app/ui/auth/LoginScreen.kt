@@ -101,6 +101,7 @@ fun LoginScreen(
     viewModel: AuthViewModel = viewModel(),
     onLoginSuccess: (User) -> Unit,
     onNavigateToVolunteer: () -> Unit = {},
+    onNavigateToSupportUs: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -117,6 +118,7 @@ fun LoginScreen(
         onRegister = { name, email, password, role -> viewModel.register(name, email, password, role) },
         onResetState = { viewModel.resetState() },
         onNavigateToVolunteer = onNavigateToVolunteer,
+        onNavigateToSupportUs = onNavigateToSupportUs,
     )
 }
 
@@ -128,6 +130,7 @@ fun LoginContent(
     onRegister: (String, String, String, UserRole) -> Unit,
     onResetState: () -> Unit,
     onNavigateToVolunteer: () -> Unit = {},
+    onNavigateToSupportUs: () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(AuthTab.LOGIN.ordinal) }
 
@@ -223,6 +226,26 @@ fun LoginContent(
                     text = "Quer apoiar nossa causa? Seja um Voluntário",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     color = CamilaGreenDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextButton(
+                onClick = onNavigateToSupportUs,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = CamilaGreen,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Como apoiar a ONG (Doações e Parcerias)",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = CamilaGreen
                 )
             }
 

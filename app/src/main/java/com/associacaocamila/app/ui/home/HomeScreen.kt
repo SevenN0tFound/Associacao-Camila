@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
@@ -132,6 +133,7 @@ import com.associacaocamila.app.ui.profile.ProfileUiState
 import com.associacaocamila.app.ui.profile.ProfileViewModel
 import com.associacaocamila.app.ui.student.StudentAttendanceScreen
 import com.associacaocamila.app.ui.student.StudentWorkshopsScreen
+import com.associacaocamila.app.ui.support.SupportUsScreen
 import com.associacaocamila.app.ui.van.VanBookingScreen
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
@@ -160,6 +162,7 @@ sealed class NavigationItem(
     data object AgendamentoVan : NavigationItem("agendamento_van", "Agendamento da Van", Icons.Default.DirectionsBus)
     data object Voluntarios : NavigationItem("voluntarios", "Voluntários", Icons.Default.Handshake)
     data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
+    data object ComoApoiar : NavigationItem("como_apoiar", "Como Apoiar", Icons.Default.Favorite)
     data object Ajuda : NavigationItem("ajuda", "Ajuda & Contato", Icons.AutoMirrored.Filled.HelpOutline)
 }
 
@@ -171,6 +174,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     initialDrawerValue: DrawerValue = DrawerValue.Closed,
     onUserUpdated: ((User) -> Unit)? = null,
+    onNavigateToVolunteer: (() -> Unit)? = null,
 ) {
     var userState by remember(currentUser) { mutableStateOf(currentUser) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -210,6 +214,7 @@ fun HomeScreen(
                 }
             }
             add(NavigationItem.Perfil)
+            add(NavigationItem.ComoApoiar)
             add(NavigationItem.Ajuda)
         }
     }
@@ -528,6 +533,15 @@ fun HomeScreen(
                         },
                         onLogout = onLogout,
                         snackbarHostState = snackbarHostState,
+                    )
+                    is NavigationItem.ComoApoiar -> SupportUsScreen(
+                        onNavigateToVolunteer = {
+                            if (onNavigateToVolunteer != null) {
+                                onNavigateToVolunteer()
+                            } else if (userState.role == UserRole.ADMIN) {
+                                selectedRoute = NavigationItem.Voluntarios.route
+                            }
+                        }
                     )
                     is NavigationItem.Ajuda -> HelpContactScreen()
                 }

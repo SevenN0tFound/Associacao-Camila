@@ -69,6 +69,20 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToVolunteer = {
                                             navController.navigate("volunteer_registration")
                                         },
+                                        onNavigateToSupportUs = {
+                                            navController.navigate("support_us")
+                                        },
+                                    )
+                                }
+
+                                composable("support_us") {
+                                    com.associacaocamila.app.ui.support.SupportUsScreen(
+                                        onNavigateBack = {
+                                            navController.popBackStack()
+                                        },
+                                        onNavigateToVolunteer = {
+                                            navController.navigate("volunteer_registration")
+                                        }
                                     )
                                 }
 
@@ -100,6 +114,9 @@ class MainActivity : ComponentActivity() {
                                                 navController.navigate("login") {
                                                     popUpTo(0) { inclusive = true }
                                                 }
+                                            },
+                                            onNavigateToVolunteer = {
+                                                navController.navigate("volunteer_registration")
                                             },
                                         )
                                     }
