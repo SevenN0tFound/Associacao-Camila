@@ -39,6 +39,11 @@ O sistema foi concebido para eliminar processos manuais em papel, garantir integ
 - **Categorização Visual:** Sinalização por etiquetas temáticas (Geral, Recesso, Evento e Urgente).
 - **Gestão Simplificada:** Criação e exclusão restritas à coordenação e docentes.
 
+### 🤝 Programa de Voluntariado & Captação
+- **Inscrição Pública:** Formulário integrado acessível na tela de login, dispensando formulários externos do Google Forms.
+- **Mapeamento de Competências:** Coleta de dados com seleção de áreas de atuação (apoio operacional, oficinas, eventos, bazar e alimentação) e turnos disponíveis.
+- **Painel Administrativo:** Acompanhamento de candidatos com triagem de status e contato direto via ligação ou WhatsApp.
+
 ---
 
 ## 🛠️ Tecnologias Utilizadas
