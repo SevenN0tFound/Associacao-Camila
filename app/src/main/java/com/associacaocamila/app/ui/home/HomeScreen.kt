@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
@@ -47,10 +50,14 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -210,6 +217,63 @@ fun HomeScreen(
     var selectedRoute by rememberSaveable(userState.role) {
         mutableStateOf(NavigationItem.Inicio.route)
     }
+
+    val isInspectionMode = LocalInspectionMode.current
+    val homeViewModel: HomeViewModel? = if (isInspectionMode) null else viewModel()
+    val homeUiState = homeViewModel?.uiState?.collectAsState()?.value ?: HomeUiState(
+        isLoadingNotices = false,
+        notices = listOf(
+            Notice(
+                id = "1",
+                title = "Oficina de Fortalecimento",
+                content = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
+                category = "EVENTO",
+                targetAudience = "TODOS",
+                authorName = "Coordenação",
+                authorRole = "ADMIN",
+            ),
+            Notice(
+                id = "2",
+                title = "Acolhimento e Assistência Social",
+                content = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipe técnica.",
+                category = "GERAL",
+                targetAudience = "RESPONSAVEIS",
+                authorName = "Serviço Social",
+                authorRole = "PROFESSOR",
+            ),
+            Notice(
+                id = "3",
+                title = "Alinhamento Pedagógico Trimestral",
+                content = "Reunião de alinhamento com todos os instrutores e professores das oficinas.",
+                category = "GERAL",
+                targetAudience = "PROFESSORES",
+                authorName = "Direção",
+                authorRole = "ADMIN",
+            ),
+        ),
+        isLoadingMetrics = false,
+        adminMetrics = AdminMetrics(
+            totalStudents = 142,
+            activeWorkshops = 8,
+            pendingVolunteers = 4,
+            overallAttendanceRate = 88,
+        ),
+    )
+
+    // Filtro dinâmico por perfil institucional
+    val filteredNotices = remember(homeUiState.notices, userState.role) {
+        homeUiState.notices.filter { notice ->
+            val audience = notice.targetAudience.trim().uppercase().ifBlank { "TODOS" }
+            when (userState.role) {
+                UserRole.ADMIN -> true
+                UserRole.PROFESSOR -> audience == "TODOS" || audience == "PROFESSORES"
+                UserRole.RESPONSAVEL, UserRole.ALUNO -> audience == "TODOS" || audience == "RESPONSAVEIS"
+            }
+        }
+    }
+
+    var showNotificationsSheet by rememberSaveable { mutableStateOf(false) }
+    var readNoticeIds by rememberSaveable { mutableStateOf(setOf<String>()) }
 
     val currentItem = navItems.firstOrNull { it.route == selectedRoute } ?: NavigationItem.Inicio
     val drawerState = rememberDrawerState(initialValue = initialDrawerValue)
@@ -389,6 +453,42 @@ fun HomeScreen(
                             )
                         }
                     },
+                    actions = {
+                        val unreadCount = remember(filteredNotices, readNoticeIds) {
+                            filteredNotices.count { !readNoticeIds.contains(it.id) }
+                        }
+                        IconButton(onClick = { showNotificationsSheet = true }) {
+                            if (unreadCount > 0) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge(
+                                            containerColor = CamilaOrange,
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = if (unreadCount > 99) "99+" else "$unreadCount",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            )
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = "Central de Notificações ($unreadCount não lidas)",
+                                        tint = CamilaGreenDark
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Central de Notificações",
+                                    tint = CamilaGreenDark
+                                )
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.White
                     )
@@ -406,7 +506,9 @@ fun HomeScreen(
                 when (navItem) {
                     is NavigationItem.Inicio -> InicioTabContent(
                         currentUser = userState,
-                        snackbarHostState = snackbarHostState
+                        snackbarHostState = snackbarHostState,
+                        homeViewModel = homeViewModel,
+                        filteredNotices = filteredNotices,
                     )
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
@@ -432,6 +534,18 @@ fun HomeScreen(
             }
         }
     }
+
+    if (showNotificationsSheet) {
+        NotificationsBottomSheet(
+            notices = filteredNotices,
+            readNoticeIds = readNoticeIds,
+            onDismiss = { showNotificationsSheet = false },
+            onMarkAsRead = { id -> readNoticeIds = readNoticeIds + id },
+            onMarkAllAsRead = {
+                readNoticeIds = readNoticeIds + filteredNotices.map { it.id }.toSet()
+            }
+        )
+    }
 }
 
 @Composable
@@ -440,6 +554,7 @@ private fun InicioTabContent(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState? = null,
     homeViewModel: HomeViewModel? = null,
+    filteredNotices: List<Notice>? = null,
 ) {
     val isInspectionMode = LocalInspectionMode.current
     val actualViewModel = if (isInspectionMode) null else (homeViewModel ?: viewModel())
@@ -451,6 +566,7 @@ private fun InicioTabContent(
                 title = "Oficina de Fortalecimento",
                 content = "Aulas e encontros socioeducativos semanais para o desenvolvimento integral de jovens e famílias.",
                 category = "EVENTO",
+                targetAudience = "TODOS",
                 authorName = "Coordenação",
                 authorRole = "ADMIN",
             ),
@@ -459,15 +575,17 @@ private fun InicioTabContent(
                 title = "Acolhimento e Assistência Social",
                 content = "Atendimentos psicossociais disponíveis para agendamento com a nossa equipe técnica.",
                 category = "GERAL",
+                targetAudience = "RESPONSAVEIS",
                 authorName = "Serviço Social",
                 authorRole = "PROFESSOR",
             ),
             Notice(
                 id = "3",
-                title = "Recesso das Aulas de Informática",
-                content = "Informamos que nesta sexta-feira não haverá aula devido à manutenção dos equipamentos.",
-                category = "RECESSO",
-                authorName = "Secretaria",
+                title = "Alinhamento Pedagógico Trimestral",
+                content = "Reunião de alinhamento com todos os instrutores e professores das oficinas.",
+                category = "GERAL",
+                targetAudience = "PROFESSORES",
+                authorName = "Direção",
                 authorRole = "ADMIN",
             ),
         ),
@@ -480,6 +598,17 @@ private fun InicioTabContent(
         ),
     )
     val context = LocalContext.current
+
+    val noticesToShow = filteredNotices ?: remember(uiState.notices, currentUser.role) {
+        uiState.notices.filter { notice ->
+            val audience = notice.targetAudience.trim().uppercase().ifBlank { "TODOS" }
+            when (currentUser.role) {
+                UserRole.ADMIN -> true
+                UserRole.PROFESSOR -> audience == "TODOS" || audience == "PROFESSORES"
+                UserRole.RESPONSAVEL, UserRole.ALUNO -> audience == "TODOS" || audience == "RESPONSAVEIS"
+            }
+        }
+    }
 
     LaunchedEffect(currentUser.role) {
         if (currentUser.role == UserRole.ADMIN) {
@@ -637,7 +766,7 @@ private fun InicioTabContent(
                     strokeWidth = 3.dp
                 )
             }
-        } else if (uiState.notices.isEmpty()) {
+        } else if (noticesToShow.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -665,7 +794,7 @@ private fun InicioTabContent(
                 }
             }
         } else {
-            uiState.notices.forEach { notice ->
+            noticesToShow.forEach { notice ->
                 NoticeCard(
                     notice = notice,
                     canDelete = canManageNotices,
@@ -678,13 +807,15 @@ private fun InicioTabContent(
     // Diálogo de criação de novo aviso (ADMIN e PROFESSOR)
     if (showAddNoticeDialog) {
         AddNoticeDialog(
+            userRole = currentUser.role,
             isPosting = uiState.isPostingNotice,
             onDismiss = { showAddNoticeDialog = false },
-            onConfirm = { title, content, category ->
+            onConfirm = { title, content, category, targetAudience ->
                 actualViewModel?.addNotice(
                     title = title,
                     content = content,
                     category = category,
+                    targetAudience = targetAudience,
                     authorName = currentUser.name.ifBlank { "Coordenação" },
                     authorRole = currentUser.role.name,
                     onSuccess = { showAddNoticeDialog = false }
@@ -963,18 +1094,42 @@ private fun NoticeCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Tag/Badge com a Categoria
-                Surface(
-                    color = categoryBadgeColor.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, categoryBadgeColor.copy(alpha = 0.25f))
+                // Tags/Badges: Categoria e Público-Alvo
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = categoryUpper,
-                        color = categoryBadgeColor,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                    Surface(
+                        color = categoryBadgeColor.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, categoryBadgeColor.copy(alpha = 0.25f))
+                    ) {
+                        Text(
+                            text = categoryUpper,
+                            color = categoryBadgeColor,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    val audienceUpper = notice.targetAudience.trim().uppercase().ifBlank { "TODOS" }
+                    val (audienceLabel, audienceColor) = when (audienceUpper) {
+                        "PROFESSORES" -> "Professores" to CamilaGreenDark
+                        "RESPONSAVEIS" -> "Responsáveis / Alunos" to CamilaOrange
+                        else -> "Todos" to CamilaGray
+                    }
+                    Surface(
+                        color = audienceColor.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, audienceColor.copy(alpha = 0.25f))
+                    ) {
+                        Text(
+                            text = audienceLabel,
+                            color = audienceColor,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1066,15 +1221,31 @@ private fun NoticeCard(
 
 @Composable
 private fun AddNoticeDialog(
+    userRole: UserRole,
     isPosting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, content: String, category: String) -> Unit,
+    onConfirm: (title: String, content: String, category: String, targetAudience: String) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("GERAL") }
+    var selectedAudience by rememberSaveable { mutableStateOf("TODOS") }
 
     val categories = listOf("GERAL", "EVENTO", "RECESSO", "URGENTE")
+    val audienceOptions = remember(userRole) {
+        if (userRole == UserRole.ADMIN) {
+            listOf(
+                "TODOS" to "Todos",
+                "PROFESSORES" to "Apenas Professores",
+                "RESPONSAVEIS" to "Apenas Responsáveis/Alunos"
+            )
+        } else {
+            listOf(
+                "TODOS" to "Todos",
+                "RESPONSAVEIS" to "Apenas Responsáveis/Alunos"
+            )
+        }
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -1104,7 +1275,7 @@ private fun AddNoticeDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Informe o título, a categoria e a mensagem para os alunos e responsáveis.",
+                    text = "Informe o título, o público-alvo, a categoria e a mensagem.",
                     style = MaterialTheme.typography.bodySmall,
                     color = CamilaGray
                 )
@@ -1121,6 +1292,47 @@ private fun AddNoticeDialog(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isPosting
                 )
+
+                // Seletor de Público-Alvo
+                Column {
+                    Text(
+                        text = "Público-Alvo *",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        audienceOptions.forEach { (code, label) ->
+                            val isSelected = selectedAudience == code
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedAudience = code },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = CamilaGreen.copy(alpha = 0.15f),
+                                    selectedLabelColor = CamilaGreenDark
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = CamilaGreen.copy(alpha = 0.35f),
+                                    selectedBorderColor = CamilaGreen
+                                ),
+                                enabled = !isPosting
+                            )
+                        }
+                    }
+                }
 
                 // Seletor de Categoria
                 Column {
@@ -1181,7 +1393,7 @@ private fun AddNoticeDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(title, content, selectedCategory) },
+                onClick = { onConfirm(title, content, selectedCategory, selectedAudience) },
                 enabled = !isPosting && title.isNotBlank() && content.isNotBlank(),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen)
@@ -1209,6 +1421,284 @@ private fun AddNoticeDialog(
         },
         shape = RoundedCornerShape(16.dp)
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotificationsBottomSheet(
+    notices: List<Notice>,
+    readNoticeIds: Set<String>,
+    onDismiss: () -> Unit,
+    onMarkAsRead: (String) -> Unit,
+    onMarkAllAsRead: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val unreadCount = notices.count { !readNoticeIds.contains(it.id) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            // Cabeçalho da Central de Notificações
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(CamilaGreen.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = CamilaGreen,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Central de Notificações",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark
+                        )
+                        Text(
+                            text = if (unreadCount > 0) "$unreadCount aviso(s) não lido(s)" else "Tudo em dia",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (unreadCount > 0) CamilaOrange else CamilaGray
+                        )
+                    }
+                }
+
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Fechar")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (unreadCount > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onMarkAllAsRead,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = CamilaGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Marcar todas como lidas",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreen
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = BackgroundLight)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (notices.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsNone,
+                            contentDescription = null,
+                            tint = CamilaGray.copy(alpha = 0.4f),
+                            modifier = Modifier.size(54.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Nenhum comunicado no momento",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CamilaGreenDark
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Quando a coordenação publicar avisos para o seu grupo, eles aparecerão aqui.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CamilaGray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(notices, key = { it.id }) { notice ->
+                        val isRead = readNoticeIds.contains(notice.id)
+                        NotificationItemCard(
+                            notice = notice,
+                            isRead = isRead,
+                            onClick = {
+                                if (!isRead) onMarkAsRead(notice.id)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationItemCard(
+    notice: Notice,
+    isRead: Boolean,
+    onClick: () -> Unit,
+) {
+    val categoryUpper = notice.category.uppercase()
+    val isUrgentOrRecess = categoryUpper == "URGENTE" || categoryUpper == "RECESSO"
+    val categoryBadgeColor = if (isUrgentOrRecess) CamilaOrange else CamilaGreen
+
+    val audienceUpper = notice.targetAudience.trim().uppercase().ifBlank { "TODOS" }
+    val (audienceLabel, audienceColor) = when (audienceUpper) {
+        "PROFESSORES" -> "Exclusivo Professores" to CamilaGreenDark
+        "RESPONSAVEIS" -> "Responsáveis & Alunos" to CamilaOrange
+        else -> "Geral / Todos" to CamilaGray
+    }
+
+    val formattedDate = remember(notice.timestamp) {
+        if (notice.timestamp > 0) {
+            java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.forLanguageTag("pt-BR"))
+                .format(java.util.Date(notice.timestamp))
+        } else {
+            ""
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isRead) BackgroundLight else Color.White,
+        border = BorderStroke(
+            width = if (isRead) 1.dp else 1.5.dp,
+            color = if (isRead) CamilaGray.copy(alpha = 0.2f) else CamilaGreen.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (!isRead) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(CamilaOrange)
+                        )
+                    }
+
+                    Surface(
+                        color = categoryBadgeColor.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = categoryUpper,
+                            color = categoryBadgeColor,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Surface(
+                        color = audienceColor.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = audienceLabel,
+                            color = audienceColor,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (formattedDate.isNotBlank()) {
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CamilaGray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = notice.title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = if (isRead) FontWeight.SemiBold else FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = notice.content,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
+
+            if (notice.authorName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = CamilaGray,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Por: ${notice.authorName}" + if (notice.authorRole.isNotBlank()) " (${notice.authorRole})" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CamilaGray
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

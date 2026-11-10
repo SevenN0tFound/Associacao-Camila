@@ -8,4 +8,5 @@ data class Notice(
     val authorRole: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val category: String = "GERAL", // GERAL, RECESSO, EVENTO, URGENTE
+    val targetAudience: String = "TODOS", // TODOS, PROFESSORES, RESPONSAVEIS
 )
