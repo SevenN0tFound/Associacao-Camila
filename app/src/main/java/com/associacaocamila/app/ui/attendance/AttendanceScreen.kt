@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -62,6 +64,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,6 +132,7 @@ fun AttendanceScreen(
             onSelectWorkshop = { viewModel.selectWorkshop(it) },
             onPreviousDay = { viewModel.previousDay() },
             onNextDay = { viewModel.nextDay() },
+            onSelectDate = { viewModel.selectDate(it) },
             onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
             onSubmitAttendance = { viewModel.submitAttendance(teacherId, context) },
@@ -152,6 +156,7 @@ fun AttendanceContent(
     onSelectWorkshop: (Workshop) -> Unit,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
+    onSelectDate: (Long) -> Unit = {},
     onSetAttendance: (String, Boolean) -> Unit,
     onMarkAll: (Boolean) -> Unit,
     onSubmitAttendance: () -> Unit,
@@ -186,6 +191,7 @@ fun AttendanceContent(
     }
 
     var showDateRangeDialog by remember { mutableStateOf(false) }
+    var showDatePickerDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -202,6 +208,7 @@ fun AttendanceContent(
             onSelectWorkshop = onSelectWorkshop,
             onPreviousDay = onPreviousDay,
             onNextDay = onNextDay,
+            onDateClick = { showDatePickerDialog = true },
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -360,10 +367,10 @@ fun AttendanceContent(
                 onClick = { showDateRangeDialog = true },
                 enabled = !uiState.isExportingPdf && uiState.selectedWorkshop != null,
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.3f)
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CamilaGreen),
+                border = BorderStroke(1.dp, CamilaGreen),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = CamilaGreenDark,
                 ),
@@ -377,13 +384,13 @@ fun AttendanceContent(
                 } else {
                     Icon(
                         imageVector = Icons.Default.PictureAsPdf,
-                        contentDescription = "Exportar Frequência em PDF",
+                        contentDescription = "Exportar Relatório em PDF",
                         tint = CamilaGreenDark,
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "PDF",
+                        text = "Exportar PDF",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleSmall,
                         color = CamilaGreenDark,
@@ -397,7 +404,7 @@ fun AttendanceContent(
                     onClick = onSubmitAttendance,
                     enabled = !uiState.isSubmitting && uiState.participants.isNotEmpty(),
                     modifier = Modifier
-                        .weight(2.2f)
+                        .weight(2f)
                         .height(52.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -448,6 +455,21 @@ fun AttendanceContent(
                 }
             )
         }
+
+        // Diálogo de Seleção de Data no Calendário
+        if (showDatePickerDialog) {
+            AttendanceDatePickerDialog(
+                initialDateMillis = uiState.selectedDateMillis,
+                onDismissRequest = { showDatePickerDialog = false },
+                onDateSelected = { pickedUtcMillis ->
+                    showDatePickerDialog = false
+                    val localMillis = utcMillisToLocalDay(pickedUtcMillis)
+                    val now = System.currentTimeMillis()
+                    val effectiveMillis = if (localMillis > now) now else localMillis
+                    onSelectDate(effectiveMillis)
+                }
+            )
+        }
     }
 }
 
@@ -461,6 +483,7 @@ private fun AttendanceHeaderCard(
     onSelectWorkshop: (Workshop) -> Unit,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
+    onDateClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -536,11 +559,14 @@ private fun AttendanceHeaderCard(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onDateClick)
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CalendarToday,
-                                contentDescription = null,
+                                contentDescription = "Selecionar data no calendário",
                                 tint = if (isToday) CamilaGreen else CamilaOrange,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -839,87 +865,108 @@ private fun AttendanceSegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF1F3F4))
-            .padding(3.dp),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Segmento: Presente
+        // Botão: Presente
         val presentBgColor by animateColorAsState(
-            targetValue = if (isPresent) CamilaGreen else Color.Transparent,
+            targetValue = if (isPresent) CamilaGreen else Color.White,
             label = "presentBgColor"
         )
         val presentContentColor by animateColorAsState(
             targetValue = if (isPresent) Color.White else CamilaGray,
             label = "presentContentColor"
         )
+        val presentBorderColor by animateColorAsState(
+            targetValue = if (isPresent) CamilaGreen else CamilaGray.copy(alpha = 0.35f),
+            label = "presentBorderColor"
+        )
 
-        Row(
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = presentBgColor,
+            border = BorderStroke(1.dp, presentBorderColor),
+            shadowElevation = if (isPresent) 1.dp else 0.dp,
             modifier = Modifier
-                .clip(RoundedCornerShape(9.dp))
-                .background(presentBgColor)
+                .clip(RoundedCornerShape(10.dp))
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = ripple(color = Color.White),
+                    indication = ripple(color = CamilaGreenDark),
                     onClick = onSelectPresent
                 )
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Presente",
-                tint = presentContentColor,
-                modifier = Modifier.size(15.dp)
-            )
-            Text(
-                text = "P",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (isPresent) FontWeight.Bold else FontWeight.Medium
-                ),
-                color = presentContentColor
-            )
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (isPresent) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = presentContentColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Text(
+                    text = "Presente",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (isPresent) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = presentContentColor
+                )
+            }
         }
 
-        // Segmento: Falta
+        // Botão: Falta
         val absentBgColor by animateColorAsState(
-            targetValue = if (!isPresent) CamilaOrange else Color.Transparent,
+            targetValue = if (!isPresent) CamilaOrange else Color.White,
             label = "absentBgColor"
         )
         val absentContentColor by animateColorAsState(
             targetValue = if (!isPresent) Color.White else CamilaGray,
             label = "absentContentColor"
         )
+        val absentBorderColor by animateColorAsState(
+            targetValue = if (!isPresent) CamilaOrange else CamilaGray.copy(alpha = 0.35f),
+            label = "absentBorderColor"
+        )
 
-        Row(
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = absentBgColor,
+            border = BorderStroke(1.dp, absentBorderColor),
+            shadowElevation = if (!isPresent) 1.dp else 0.dp,
             modifier = Modifier
-                .clip(RoundedCornerShape(9.dp))
-                .background(absentBgColor)
+                .clip(RoundedCornerShape(10.dp))
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = ripple(color = Color.White),
+                    indication = ripple(color = CamilaOrange),
                     onClick = onSelectAbsent
                 )
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Falta",
-                tint = absentContentColor,
-                modifier = Modifier.size(15.dp)
-            )
-            Text(
-                text = "F",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (!isPresent) FontWeight.Bold else FontWeight.Medium
-                ),
-                color = absentContentColor
-            )
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (!isPresent) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = absentContentColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Text(
+                    text = "Falta",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (!isPresent) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = absentContentColor
+                )
+            }
         }
     }
 }
@@ -1232,4 +1279,67 @@ fun DateRangeReportPickerDialog(
             )
         }
     }
+}
+
+/**
+ * Diálogo com Material 3 DatePicker para seleção direta de data na chamada.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttendanceDatePickerDialog(
+    initialDateMillis: Long,
+    onDismissRequest: () -> Unit,
+    onDateSelected: (Long) -> Unit,
+) {
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDateMillis
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            Button(
+                onClick = {
+                    datePickerState.selectedDateMillis?.let { onDateSelected(it) }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen)
+            ) {
+                Text("Selecionar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancelar", color = CamilaGray)
+            }
+        }
+    ) {
+        DatePicker(
+            state = datePickerState,
+            colors = DatePickerDefaults.colors(
+                selectedDayContainerColor = CamilaGreen,
+                todayDateBorderColor = CamilaGreen,
+                todayContentColor = CamilaGreenDark
+            )
+        )
+    }
+}
+
+/**
+ * Converte milissegundos UTC retornados pelo DatePicker do Material 3
+ * para a data correspondente no fuso horário local.
+ */
+private fun utcMillisToLocalDay(utcMillis: Long): Long {
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = utcMillis
+    }
+    val localCal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 12)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return localCal.timeInMillis
 }

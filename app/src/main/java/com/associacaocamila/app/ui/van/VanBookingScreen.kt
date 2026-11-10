@@ -80,6 +80,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.associacaocamila.app.data.model.User
@@ -238,24 +239,24 @@ fun VanBookingScreen(
                     CircularProgressIndicator(color = CamilaGreen)
                 }
             } else if (uiState.bookings.isEmpty()) {
-                // Estado Vazio Amigável
+                // Estado Vazio Amigável Centralizado
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(24.dp),
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
+                                .padding(vertical = 40.dp, horizontal = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
@@ -276,27 +277,16 @@ fun VanBookingScreen(
                             Text(
                                 text = "Nenhuma reserva para este dia.",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = CamilaGreenDark
+                                color = CamilaGreenDark,
+                                textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "A van está totalmente disponível!",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = CamilaGray
+                                color = CamilaGray,
+                                textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.clearMessages()
-                                    showNewBookingSheet = true
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Agendar Agora")
-                            }
                         }
                     }
                 }
@@ -450,130 +440,89 @@ private fun VanDateSelectorBar(
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = Color.White,
-        shadowElevation = 2.dp
+        shadowElevation = 1.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // Controles de Navegação por Data: [<] [ Ícone + Data ] [>]
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = BackgroundLight,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(CamilaGreen.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    IconButton(
+                        onClick = onPreviousDay,
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DirectionsBus,
-                            contentDescription = null,
-                            tint = CamilaGreen,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Dia anterior",
+                            tint = CamilaGreenDark,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (isToday) "Hoje" else fullFormattedDate,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = CamilaGreenDark
-                        )
-                        Text(
-                            text = if (isToday) fullFormattedDate else "Data selecionada",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isToday) CamilaGreen else CamilaOrange
-                        )
-                    }
-                }
 
-                // Controles de Navegação Anterior / Próximo e Calendário
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = BackgroundLight,
-                    modifier = Modifier.padding(start = 4.dp)
-                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onDateClick)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        IconButton(
-                            onClick = onPreviousDay,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Dia anterior",
-                                tint = CamilaGreenDark,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "Selecionar data no calendário",
+                            tint = if (isToday) CamilaGreen else CamilaOrange,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isToday) "Hoje ($formattedDate)" else fullFormattedDate,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onDateClick() }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarToday,
-                                contentDescription = "Selecionar data",
-                                tint = if (isToday) CamilaGreen else CamilaOrange,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = formattedDate,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onNextDay,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Próximo dia",
-                                tint = CamilaGreenDark,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                    IconButton(
+                        onClick = onNextDay,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Próximo dia",
+                            tint = CamilaGreenDark,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 }
             }
 
             if (!isToday) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                TextButton(
+                    onClick = onGoToToday,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    TextButton(
-                        onClick = onGoToToday,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        modifier = Modifier.height(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EventAvailable,
-                            contentDescription = null,
-                            tint = CamilaGreen,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Ir para Hoje",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = CamilaGreen
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.EventAvailable,
+                        contentDescription = null,
+                        tint = CamilaGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Ir para Hoje",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CamilaGreen
+                    )
                 }
             }
         }
