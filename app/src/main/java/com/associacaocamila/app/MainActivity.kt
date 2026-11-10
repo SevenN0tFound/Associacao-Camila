@@ -66,6 +66,17 @@ class MainActivity : ComponentActivity() {
                                                 popUpTo("login") { inclusive = true }
                                             }
                                         },
+                                        onNavigateToVolunteer = {
+                                            navController.navigate("volunteer_registration")
+                                        },
+                                    )
+                                }
+
+                                composable("volunteer_registration") {
+                                    com.associacaocamila.app.ui.volunteer.VolunteerRegistrationScreen(
+                                        onNavigateBack = {
+                                            navController.popBackStack()
+                                        }
                                     )
                                 }
 

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -114,6 +115,7 @@ import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.UserRole
 import com.associacaocamila.app.data.model.UserStatus
 import com.associacaocamila.app.ui.admin.AdminApprovalsScreen
+import com.associacaocamila.app.ui.admin.AdminVolunteersScreen
 import com.associacaocamila.app.ui.admin.AdminWorkshopsScreen
 import com.associacaocamila.app.ui.attendance.AttendanceScreen
 import com.associacaocamila.app.ui.components.ProfileAvatar
@@ -148,6 +150,7 @@ sealed class NavigationItem(
     data object Aprovacoes : NavigationItem("aprovacoes", "Aprovações", Icons.Default.Check)
     data object Turmas : NavigationItem("turmas", "Turmas", Icons.Default.School)
     data object AgendamentoVan : NavigationItem("agendamento_van", "Agendamento da Van", Icons.Default.DirectionsBus)
+    data object Voluntarios : NavigationItem("voluntarios", "Voluntários", Icons.Default.Handshake)
     data object Perfil : NavigationItem("perfil", "Perfil", Icons.Default.Person)
     data object Ajuda : NavigationItem("ajuda", "Ajuda & Contato", Icons.AutoMirrored.Filled.HelpOutline)
 }
@@ -195,6 +198,7 @@ fun HomeScreen(
                     add(NavigationItem.Aprovacoes)
                     add(NavigationItem.Turmas)
                     add(NavigationItem.AgendamentoVan)
+                    add(NavigationItem.Voluntarios)
                 }
             }
             add(NavigationItem.Perfil)
@@ -412,6 +416,7 @@ fun HomeScreen(
                         currentUser = userState,
                         onNavigateBack = { selectedRoute = NavigationItem.Inicio.route }
                     )
+                    is NavigationItem.Voluntarios -> AdminVolunteersScreen()
                     is NavigationItem.Perfil -> PerfilTabContent(
                         currentUser = userState,
                         onUserUpdated = { updated ->

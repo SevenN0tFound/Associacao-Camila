@@ -72,18 +72,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
+import androidx.compose.material.icons.filled.CameraAlt
 import com.associacaocamila.app.ui.theme.CamilaGray
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
 
-private const val WHATSAPP_NUMBER = "5511987654321"
-private const val CONTACT_EMAIL = "contato@associacaocamila.org.br"
-private const val PHONE_NUMBER = "(11) 2345-6789"
-private const val PHONE_DIAL_URI = "tel:1123456789"
-private const val HEADQUARTERS_ADDRESS = "Rua das Camélias, 120 - Vila Esperança, São Paulo - SP, CEP 08000-000"
-private const val MAPS_QUERY_ADDRESS = "Associação Camila, Rua das Camélias, 120, São Paulo - SP"
-private const val SERVICE_HOURS = "Segunda a Sexta-feira: 08h00 às 17h00\nSábados (atividades especiais): 09h00 às 13h00"
+private const val WHATSAPP_NUMBER = "5511999999999"
+private const val WHATSAPP_DISPLAY = "(11) 99999-9999 (Aguardando confirmação)"
+private const val CONTACT_EMAIL = "contato@associacaocamila.org.br (Aguardando confirmação)"
+private const val CONTACT_EMAIL_ACTUAL = "contato@associacaocamila.org.br"
+private const val PHONE_NUMBER = "(11) 99999-9999 (Aguardando confirmação)"
+private const val PHONE_DIAL_URI = "tel:11999999999"
+private const val HEADQUARTERS_ADDRESS = "Av. Clóvis Assaf, 455 - Conceição, Osasco - SP, 06145-080"
+private const val MAPS_QUERY_ADDRESS = "Av. Clóvis Assaf, 455 - Conceição, Osasco - SP, 06145-080"
+private const val SERVICE_HOURS = "Segunda a Sexta: 08h às 17h\nSábados, Domingos e Feriados: Fechado"
+private const val INSTAGRAM_URL = "https://www.instagram.com/associacaocamila"
 
 /**
  * Dados de cada pergunta frequente institucional.
@@ -97,8 +101,8 @@ data class FaqItem(
 private val FAQ_ITEMS = listOf(
     FaqItem(
         id = 1,
-        question = "Como funciona a presença e tolerância de faltas?",
-        answer = "A frequência mínima recomendada para certificação e manutenção da vaga na oficina é de 75%. Em caso de ausência por saúde, trabalho ou compromisso escolar/familiar justificado, o participante pode abonar a falta enviando atestado ou declaração pelo aplicativo."
+        question = "Como funciona a presença e tolerância de faltas nas oficinas?",
+        answer = "A frequência mínima exigida para certificação e manutenção da vaga na oficina é de 75%. Em caso de falta justificada por motivos médicos ou escolares, o responsável deve anexar o comprovante pelo app."
     ),
     FaqItem(
         id = 2,
@@ -186,7 +190,7 @@ fun HelpContactContent(
         // Banner de Acolhimento Institucional
         InstitutionalWelcomeBanner()
 
-        // Card de Ações Rápidas de Atendimento (WhatsApp, E-mail, Telefone)
+        // Card de Ações Rápidas de Atendimento (WhatsApp, E-mail, Telefone, Instagram)
         QuickContactActionsCard(
             onOpenWhatsApp = {
                 val message = "Olá! Gostaria de informações sobre os projetos e oficinas da Associação Camila."
@@ -200,7 +204,7 @@ fun HelpContactContent(
             },
             onSendEmail = {
                 val intent = Intent(Intent.ACTION_SENDTO).apply {
-                    data = Uri.parse("mailto:$CONTACT_EMAIL")
+                    data = Uri.parse("mailto:$CONTACT_EMAIL_ACTUAL")
                     putExtra(Intent.EXTRA_SUBJECT, "Contato / Dúvida - Associação Camila")
                 }
                 launchIntentSafely(
@@ -215,6 +219,14 @@ fun HelpContactContent(
                     context = context,
                     intent = intent,
                     failureMessage = "Nenhum discador telefônico encontrado no dispositivo."
+                )
+            },
+            onOpenInstagram = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(INSTAGRAM_URL))
+                launchIntentSafely(
+                    context = context,
+                    intent = intent,
+                    failureMessage = "Não foi possível abrir o navegador ou aplicativo do Instagram."
                 )
             }
         )
@@ -305,6 +317,7 @@ private fun QuickContactActionsCard(
     onOpenWhatsApp: () -> Unit,
     onSendEmail: () -> Unit,
     onCallPhone: () -> Unit,
+    onOpenInstagram: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -332,7 +345,7 @@ private fun QuickContactActionsCard(
             ContactActionButton(
                 icon = Icons.AutoMirrored.Filled.Chat,
                 title = "WhatsApp da Coordenação",
-                subtitle = "Atendimento ágil para dúvidas e avisos",
+                subtitle = WHATSAPP_DISPLAY,
                 buttonText = "Conversar no WhatsApp",
                 accentColor = CamilaGreen,
                 onClick = onOpenWhatsApp
@@ -355,11 +368,23 @@ private fun QuickContactActionsCard(
             // Botão Ligar
             ContactActionButton(
                 icon = Icons.Default.Phone,
-                title = "Telefone Fixo / Comercial",
+                title = "Telefone / Contato",
                 subtitle = PHONE_NUMBER,
                 buttonText = "Ligar Agora",
                 accentColor = CamilaGreenDark,
                 onClick = onCallPhone
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Botão Instagram
+            ContactActionButton(
+                icon = Icons.Default.CameraAlt,
+                title = "Instagram Oficial",
+                subtitle = "@associacaocamila",
+                buttonText = "Seguir no Instagram",
+                accentColor = CamilaOrange,
+                onClick = onOpenInstagram
             )
         }
     }

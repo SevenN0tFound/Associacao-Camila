@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,9 +46,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PrimaryTabRow
@@ -96,7 +99,8 @@ private enum class AuthTab(val title: String) {
 fun LoginScreen(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = viewModel(),
-    onLoginSuccess: (User) -> Unit
+    onLoginSuccess: (User) -> Unit,
+    onNavigateToVolunteer: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -111,7 +115,8 @@ fun LoginScreen(
         modifier = modifier,
         onLogin = { email, password -> viewModel.login(email, password) },
         onRegister = { name, email, password, role -> viewModel.register(name, email, password, role) },
-        onResetState = { viewModel.resetState() }
+        onResetState = { viewModel.resetState() },
+        onNavigateToVolunteer = onNavigateToVolunteer,
     )
 }
 
@@ -121,7 +126,8 @@ fun LoginContent(
     modifier: Modifier = Modifier,
     onLogin: (String, String) -> Unit,
     onRegister: (String, String, String, UserRole) -> Unit,
-    onResetState: () -> Unit
+    onResetState: () -> Unit,
+    onNavigateToVolunteer: () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(AuthTab.LOGIN.ordinal) }
 
@@ -187,6 +193,40 @@ fun LoginContent(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            HorizontalDivider(
+                color = CamilaGray.copy(alpha = 0.2f),
+                modifier = Modifier.fillMaxWidth(0.9f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onNavigateToVolunteer,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.2.dp, CamilaGreen),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = CamilaGreenDark),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = CamilaOrange,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Quer apoiar nossa causa? Seja um Voluntário",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
