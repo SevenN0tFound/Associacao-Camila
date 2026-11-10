@@ -32,7 +32,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -53,6 +52,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -60,6 +61,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,22 +74,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
-import androidx.compose.material.icons.filled.CameraAlt
 import com.associacaocamila.app.ui.theme.CamilaGray
 import com.associacaocamila.app.ui.theme.CamilaGreen
 import com.associacaocamila.app.ui.theme.CamilaGreenDark
 import com.associacaocamila.app.ui.theme.CamilaOrange
+import kotlinx.coroutines.launch
 
-private const val WHATSAPP_NUMBER = "5511999999999"
-private const val WHATSAPP_DISPLAY = "(11) 99999-9999 (Aguardando confirmação)"
-private const val CONTACT_EMAIL = "contato@associacaocamila.org.br (Aguardando confirmação)"
-private const val CONTACT_EMAIL_ACTUAL = "contato@associacaocamila.org.br"
-private const val PHONE_NUMBER = "(11) 99999-9999 (Aguardando confirmação)"
-private const val PHONE_DIAL_URI = "tel:11999999999"
-private const val HEADQUARTERS_ADDRESS = "Av. Clóvis Assaf, 455 - Conceição, Osasco - SP, 06145-080"
+private const val PHONE_NUMBER = "(11) 3592-0330"
+private const val PHONE_DIAL_URI = "tel:1135920330"
+private const val CONTACT_EMAIL = "contato@associacaocamila.org.br"
+private const val HEADQUARTERS_ADDRESS = "Av. Clóvis Assaf, 455 – Conceição, Osasco – SP, 06145-080"
 private const val MAPS_QUERY_ADDRESS = "Av. Clóvis Assaf, 455 - Conceição, Osasco - SP, 06145-080"
 private const val SERVICE_HOURS = "Segunda a Sexta: 08h às 17h\nSábados, Domingos e Feriados: Fechado"
-private const val INSTAGRAM_URL = "https://www.instagram.com/associacaocamila"
 
 /**
  * Dados de cada pergunta frequente institucional.
@@ -121,12 +119,16 @@ private val FAQ_ITEMS = listOf(
     )
 )
 
+/**
+ * Tela institucional de Ajuda, Suporte e Canais de Contato com a Associação Camila.
+ * Pode ser exibida com TopAppBar própria ou embutida no fluxo principal da HomeScreen.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HelpContactScreen(
     modifier: Modifier = Modifier,
     onNavigateBack: (() -> Unit)? = null,
-    showTopBar: Boolean = false,
+    showTopBar: Boolean = (onNavigateBack != null),
 ) {
     if (showTopBar) {
         Scaffold(
@@ -180,84 +182,85 @@ fun HelpContactContent(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val expandedStates = remember { mutableStateMapOf<Int, Boolean>() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    Column(
-        modifier = modifier
-            .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Banner de Acolhimento Institucional
-        InstitutionalWelcomeBanner()
+    Box(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Banner de Acolhimento Institucional
+            InstitutionalWelcomeBanner()
 
-        // Card de Ações Rápidas de Atendimento (WhatsApp, E-mail, Telefone, Instagram)
-        QuickContactActionsCard(
-            onOpenWhatsApp = {
-                val message = "Olá! Gostaria de informações sobre os projetos e oficinas da Associação Camila."
-                val url = "https://api.whatsapp.com/send?phone=$WHATSAPP_NUMBER&text=${Uri.encode(message)}"
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                launchIntentSafely(
-                    context = context,
-                    intent = intent,
-                    failureMessage = "Não foi possível abrir o WhatsApp. Verifique se o aplicativo está instalado."
-                )
-            },
-            onSendEmail = {
-                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                    data = Uri.parse("mailto:$CONTACT_EMAIL_ACTUAL")
-                    putExtra(Intent.EXTRA_SUBJECT, "Contato / Dúvida - Associação Camila")
+            // Card de Ações Rápidas de Atendimento (Telefone Fixo, E-mail, WhatsApp)
+            QuickContactActionsCard(
+                onCallPhone = {
+                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse(PHONE_DIAL_URI))
+                    launchIntentSafely(
+                        context = context,
+                        intent = intent,
+                        failureMessage = "Nenhum discador telefônico encontrado no dispositivo."
+                    )
+                },
+                onSendEmail = {
+                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:$CONTACT_EMAIL")
+                        putExtra(Intent.EXTRA_SUBJECT, "Contato / Dúvida - Associação Camila")
+                    }
+                    launchIntentSafely(
+                        context = context,
+                        intent = intent,
+                        failureMessage = "Nenhum aplicativo de e-mail encontrado no dispositivo."
+                    )
+                },
+                onOpenWhatsApp = {
+                    val message = "Canal de WhatsApp em alinhamento com a coordenação"
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message)
+                    }
                 }
-                launchIntentSafely(
-                    context = context,
-                    intent = intent,
-                    failureMessage = "Nenhum aplicativo de e-mail encontrado no dispositivo."
-                )
-            },
-            onCallPhone = {
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse(PHONE_DIAL_URI))
-                launchIntentSafely(
-                    context = context,
-                    intent = intent,
-                    failureMessage = "Nenhum discador telefônico encontrado no dispositivo."
-                )
-            },
-            onOpenInstagram = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(INSTAGRAM_URL))
-                launchIntentSafely(
-                    context = context,
-                    intent = intent,
-                    failureMessage = "Não foi possível abrir o navegador ou aplicativo do Instagram."
-                )
-            }
+            )
+
+            // Card de Endereço da Sede e Horários de Atendimento
+            LocationAndHoursCard(
+                onOpenMaps = {
+                    val mapUri = Uri.parse("geo:0,0?q=${Uri.encode(MAPS_QUERY_ADDRESS)}")
+                    val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
+                    launchIntentSafely(
+                        context = context,
+                        intent = mapIntent,
+                        failureMessage = "Não foi possível abrir o aplicativo de mapas ou navegador."
+                    )
+                }
+            )
+
+            // Seção de Perguntas Frequentes (FAQ)
+            FaqSection(
+                items = FAQ_ITEMS,
+                expandedStates = expandedStates,
+                onToggleExpand = { id ->
+                    val current = expandedStates[id] ?: false
+                    expandedStates[id] = !current
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Rodapé Institucional
+            InstitutionalFooter()
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
         )
-
-        // Card de Endereço da Sede e Horários de Atendimento
-        LocationAndHoursCard(
-            onOpenMaps = {
-                val mapUri = Uri.parse("geo:0,0?q=${Uri.encode(MAPS_QUERY_ADDRESS)}")
-                val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
-                launchIntentSafely(
-                    context = context,
-                    intent = mapIntent,
-                    failureMessage = "Não foi possível abrir o aplicativo de mapas ou navegador."
-                )
-            }
-        )
-
-        // Seção de Perguntas Frequentes (FAQ)
-        FaqSection(
-            items = FAQ_ITEMS,
-            expandedStates = expandedStates,
-            onToggleExpand = { id ->
-                val current = expandedStates[id] ?: false
-                expandedStates[id] = !current
-            }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Rodapé Institucional
-        InstitutionalFooter()
     }
 }
 
@@ -314,10 +317,9 @@ private fun InstitutionalWelcomeBanner(
 
 @Composable
 private fun QuickContactActionsCard(
-    onOpenWhatsApp: () -> Unit,
-    onSendEmail: () -> Unit,
     onCallPhone: () -> Unit,
-    onOpenInstagram: () -> Unit,
+    onSendEmail: () -> Unit,
+    onOpenWhatsApp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -341,19 +343,19 @@ private fun QuickContactActionsCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Botão WhatsApp
+            // 1. Telefone Fixo
             ContactActionButton(
-                icon = Icons.AutoMirrored.Filled.Chat,
-                title = "WhatsApp da Coordenação",
-                subtitle = WHATSAPP_DISPLAY,
-                buttonText = "Conversar no WhatsApp",
-                accentColor = CamilaGreen,
-                onClick = onOpenWhatsApp
+                icon = Icons.Default.Phone,
+                title = "Telefone Fixo",
+                subtitle = PHONE_NUMBER,
+                buttonText = "Ligar Agora",
+                accentColor = CamilaGreenDark,
+                onClick = onCallPhone
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Botão E-mail
+            // 2. E-mail Institucional
             ContactActionButton(
                 icon = Icons.Default.Email,
                 title = "E-mail Institucional",
@@ -365,26 +367,15 @@ private fun QuickContactActionsCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Botão Ligar
+            // 3. WhatsApp (Demonstrativo / Em breve)
             ContactActionButton(
-                icon = Icons.Default.Phone,
-                title = "Telefone / Contato",
-                subtitle = PHONE_NUMBER,
-                buttonText = "Ligar Agora",
-                accentColor = CamilaGreenDark,
-                onClick = onCallPhone
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Botão Instagram
-            ContactActionButton(
-                icon = Icons.Default.CameraAlt,
-                title = "Instagram Oficial",
-                subtitle = "@associacaocamila",
-                buttonText = "Seguir no Instagram",
-                accentColor = CamilaOrange,
-                onClick = onOpenInstagram
+                icon = Icons.AutoMirrored.Filled.Chat,
+                title = "WhatsApp da Coordenação",
+                subtitle = "Canal em configuração",
+                statusBadge = "Em breve",
+                buttonText = "Em breve",
+                accentColor = CamilaGreen,
+                onClick = onOpenWhatsApp
             )
         }
     }
@@ -399,9 +390,12 @@ private fun ContactActionButton(
     accentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    statusBadge: String? = null,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         color = BackgroundLight,
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.2f))
@@ -430,11 +424,28 @@ private fun ContactActionButton(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (statusBadge != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = accentColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = statusBadge,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = accentColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -625,108 +636,59 @@ private fun FaqSection(
             )
         }
 
-        Text(
-            text = "Tire suas dúvidas sobre frequência, atestados, inscrições e suporte pedagógico:",
-            style = MaterialTheme.typography.bodySmall,
-            color = CamilaGray
-        )
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        items.forEach { faqItem ->
-            val isExpanded = expandedStates[faqItem.id] ?: false
-            FaqItemCard(
-                faq = faqItem,
-                isExpanded = isExpanded,
-                onToggle = { onToggleExpand(faqItem.id) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun FaqItemCard(
-    faq: FaqItem,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onToggle),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        items.forEach { faq ->
+            val isExpanded = expandedStates[faq.id] ?: false
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand(faq.id) },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(
+                    1.dp,
+                    if (isExpanded) CamilaGreen.copy(alpha = 0.5f) else CamilaGray.copy(alpha = 0.15f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isExpanded) CamilaGreen.copy(alpha = 0.12f)
-                                else CamilaOrange.copy(alpha = 0.1f)
-                            ),
-                        contentAlignment = Alignment.Center
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        Text(
+                            text = faq.question,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isExpanded) CamilaGreenDark else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                            contentDescription = null,
-                            tint = if (isExpanded) CamilaGreen else CamilaOrange,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Recolher" else "Expandir",
+                            tint = if (isExpanded) CamilaGreen else CamilaGray
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Text(
-                        text = faq.question,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (isExpanded) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                IconButton(
-                    onClick = onToggle,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Recolher resposta" else "Expandir resposta",
-                        tint = CamilaGray
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(
-                        color = BackgroundLight,
-                        thickness = 1.dp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = faq.answer,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                        lineHeight = 20.sp
-                    )
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(
+                                color = BackgroundLight,
+                                thickness = 1.dp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = faq.answer,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -1518,13 +1518,11 @@ private fun NotificationsBottomSheet(
             ) {
                 OutlinedButton(
                     onClick = {
-                        NotificationHelper.showLocalNotification(
+                        NotificationHelper.showNotification(
                             context = context,
-                            title = "Associação Camila - Teste",
-                            message = "Notificação local de teste disparada com sucesso no seu dispositivo!",
-                            notificationId = 999,
+                            title = "Teste da Associação Camila",
+                            message = "As notificações locais estão funcionando perfeitamente!",
                         )
-                        Toast.makeText(context, "Notificação de teste disparada!", Toast.LENGTH_SHORT).show()
                     },
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, CamilaGreen.copy(alpha = 0.4f)),

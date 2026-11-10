@@ -9,24 +9,25 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.associacaocamila.app.MainActivity
-import com.associacaocamila.app.R
 
 /**
- * Utilitário institucional para gerenciamento e disparo de notificações locais nativas.
+ * Utilitário institucional blindado para gerenciamento e disparo seguro de notificações locais nativas.
  */
 object NotificationHelper {
 
+    const val CHANNEL_GENERAL_ID = "camila_general_channel"
     const val CHANNEL_ALERTS_ID = "camila_alerts_channel"
     const val CHANNEL_ATTENDANCE_ID = "channel_attendance"
     const val CHANNEL_REMINDERS_ID = "channel_reminders"
 
-    private const val CHANNEL_ALERTS_NAME = "Avisos da Associação Camila"
-    private const val CHANNEL_ALERTS_DESC = "Notificações sobre frequência, recados e avisos institucionais"
+    private const val CHANNEL_GENERAL_NAME = "Avisos da Associação Camila"
+    private const val CHANNEL_GENERAL_DESC = "Notificações sobre frequência, recados e avisos institucionais"
 
     private const val CHANNEL_ATTENDANCE_NAME = "Avisos de Frequência"
     private const val CHANNEL_REMINDERS_NAME = "Lembretes de Atividades"
@@ -35,33 +36,42 @@ object NotificationHelper {
     private val COLOR_GREEN = Color.parseColor("#00A669")
 
     /**
-     * Inicializa o canal principal de notificações institucionais com IMPORTANCE_HIGH.
+     * 1. Registro do Canal Seguro (createChannel):
+     * Cria e registra o NotificationChannel institucional ("camila_general_channel") com IMPORTANCE_HIGH,
+     * som, luz e vibração padrão. Chamado automaticamente antes de qualquer disparo.
      */
-    fun createNotificationChannel(context: Context) {
+    fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
 
-            val alertsChannel = NotificationChannel(
-                CHANNEL_ALERTS_ID,
-                CHANNEL_ALERTS_NAME,
+            val generalChannel = NotificationChannel(
+                CHANNEL_GENERAL_ID,
+                CHANNEL_GENERAL_NAME,
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = CHANNEL_ALERTS_DESC
+                description = CHANNEL_GENERAL_DESC
                 enableLights(true)
                 lightColor = COLOR_GREEN
                 enableVibration(true)
             }
 
-            notificationManager.createNotificationChannel(alertsChannel)
+            notificationManager.createNotificationChannel(generalChannel)
         }
+    }
+
+    /**
+     * Alias de retrocompatibilidade para [createChannel].
+     */
+    fun createNotificationChannel(context: Context) {
+        createChannel(context)
     }
 
     /**
      * Inicializa todos os canais de notificação no Android 8.0 (API 26) ou superior.
      */
     fun createNotificationChannels(context: Context) {
-        createNotificationChannel(context)
+        createChannel(context)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -96,23 +106,42 @@ object NotificationHelper {
     }
 
     /**
-     * Dispara notificação local nativa com título, mensagem, som, vibração e ícone padrão.
+     * 2. Disparo de Notificação com Fallback e Feedback:
+     * - Garante que o canal exista chamando [createChannel].
+     * - Configura NotificationCompat.Builder com ícone nativo [android.R.drawable.ic_dialog_info].
+     * - Valida permissão POST_NOTIFICATIONS com feedback via Toast quando negada ou concedida.
      */
-    fun showLocalNotification(
+    fun showNotification(
         context: Context,
         title: String,
         message: String,
-        notificationId: Int = 1,
+        notificationId: Int = System.currentTimeMillis().toInt(),
     ) {
-        // Assegura a existência do canal antes de disparar
-        createNotificationChannel(context)
+        // Garante que o canal exista mesmo que não tenha sido inicializado no Application/MainActivity
+        createChannel(context)
 
+        // Validação estrita de permissão
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ActivityCompat.checkSelfPermission(
+            val hasPermission = ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                Toast.makeText(
                     context,
-                    Manifest.permission.POST_NOTIFICATIONS,
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+                    "Permissão de notificação negada nas configurações do aparelho",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return
+            }
+        } else {
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                Toast.makeText(
+                    context,
+                    "Permissão de notificação negada nas configurações do aparelho",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 return
             }
         }
@@ -128,29 +157,46 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val smallIcon = try {
-            R.drawable.ic_launcher_foreground
-        } catch (_: Exception) {
-            android.R.drawable.ic_dialog_info
-        }
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS_ID)
-            .setSmallIcon(smallIcon)
+        val builder = NotificationCompat.Builder(context, CHANNEL_GENERAL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setColor(COLOR_GREEN)
-            .setAutoCancel(true)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setColor(COLOR_GREEN)
             .setContentIntent(pendingIntent)
-            .build()
 
         try {
-            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            val notificationManager = NotificationManagerCompat.from(context)
+            notificationManager.notify(notificationId, builder.build())
+            Toast.makeText(context, "Notificação enviada!", Toast.LENGTH_SHORT).show()
         } catch (_: SecurityException) {
-            // Permissão não concedida
+            Toast.makeText(
+                context,
+                "Permissão de notificação negada nas configurações do aparelho",
+                Toast.LENGTH_SHORT,
+            ).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                "Erro ao disparar notificação: ${e.localizedMessage}",
+                Toast.LENGTH_SHORT,
+            ).show()
         }
+    }
+
+    /**
+     * Alias para [showNotification] mantendo compatibilidade com chamadas existentes.
+     */
+    fun showLocalNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = System.currentTimeMillis().toInt(),
+    ) {
+        showNotification(context, title, message, notificationId)
     }
 
     /**
@@ -171,7 +217,7 @@ object NotificationHelper {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ATTENDANCE_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Registro de Frequência - Associação Camila")
             .setContentText("Foi registrada falta para $studentName na oficina $workshopName.")
             .setStyle(
@@ -219,7 +265,7 @@ object NotificationHelper {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_REMINDERS_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Lembrete de Oficina - Associação Camila")
             .setContentText("Hoje tem $workshopName às $timeText. Não perca!")
             .setStyle(
