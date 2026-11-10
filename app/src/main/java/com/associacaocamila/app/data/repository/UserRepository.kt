@@ -1,5 +1,6 @@
 package com.associacaocamila.app.data.repository
 
+import android.content.Context
 import android.net.Uri
 import com.associacaocamila.app.data.model.Dependent
 import com.associacaocamila.app.data.model.User
@@ -24,7 +25,7 @@ interface UserRepository {
     suspend fun updateUserStatus(userId: String, newStatus: UserStatus): Result<Unit>
     suspend fun updateUserProfile(userId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun addDependentToUser(userId: String, dependent: Dependent): Result<Unit>
-    suspend fun uploadProfilePhoto(userId: String, imageUri: Uri): Result<String>
+    suspend fun uploadProfilePhoto(userId: String, imageUri: Uri, context: Context): Result<String>
 }
 
 class UserRepositoryImpl(
@@ -151,14 +152,22 @@ class UserRepositoryImpl(
                 .await()
         }
 
-    override suspend fun uploadProfilePhoto(userId: String, imageUri: Uri): Result<String> = runCatching {
+    override suspend fun uploadProfilePhoto(userId: String, imageUri: Uri, context: Context): Result<String> = runCatching {
         require(userId.isNotBlank()) { "ID do usuário não pode ser vazio." }
         val storageRef = Firebase.storage.reference.child("profile_photos/$userId.jpg")
-        // Aguarda o upload do arquivo ser 100% concluído
-        storageRef.putFile(imageUri).await()
-        // Só então busca a URL pública de download
+        val inputStream = context.contentResolver.openInputStream(imageUri)
+            ?: throw IllegalArgumentException("Não foi possível abrir a imagem selecionada.")
+
+        try {
+            storageRef.putStream(inputStream).await()
+        } finally {
+            try {
+                inputStream.close()
+            } catch (_: Exception) {
+            }
+        }
+
         val downloadUrl = storageRef.downloadUrl.await().toString()
-        // Atualiza no Firestore
         Firebase.firestore.collection(USERS_COLLECTION).document(userId)
             .update("photoUrl", downloadUrl)
             .await()

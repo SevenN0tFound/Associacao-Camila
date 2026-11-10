@@ -56,6 +56,7 @@ fun ProfileAvatar(
     onPhotoUpdated: ((String) -> Unit)? = null,
     onError: ((String) -> Unit)? = null,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var isUploading by remember { mutableStateOf(false) }
 
@@ -67,7 +68,7 @@ fun ProfileAvatar(
             if (user.id.isNotBlank()) {
                 scope.launch {
                     isUploading = true
-                    val result = userRepository.uploadProfilePhoto(user.id, uri)
+                    val result = userRepository.uploadProfilePhoto(user.id, uri, context)
                     isUploading = false
                     if (result.isSuccess) {
                         val downloadUrl = result.getOrThrow()
