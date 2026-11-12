@@ -126,13 +126,15 @@ class AttendanceViewModel(
                 )
             }
 
-            if (workshop.enrolledStudentIds.isEmpty()) {
+            val distinctStudentIds = workshop.enrolledStudentIds.distinct().filter { it.isNotBlank() }
+
+            if (distinctStudentIds.isEmpty()) {
                 _uiState.update { it.copy(isLoadingStudents = false) }
                 return@launch
             }
 
-            // 1. Carrega participantes matriculados
-            val participantsResult = repository.getParticipantsForWorkshop(workshop.enrolledStudentIds)
+            // 1. Carrega participantes matriculados desduplicados
+            val participantsResult = repository.getParticipantsForWorkshop(distinctStudentIds)
             val participants = participantsResult.getOrElse { error ->
                 _uiState.update {
                     it.copy(
@@ -141,7 +143,7 @@ class AttendanceViewModel(
                     )
                 }
                 return@launch
-            }
+            }.distinctBy { it.id }
 
             // 2. Carrega histórico de chamadas da oficina
             val recordsResult = repository.getAttendanceRecordsForWorkshop(workshop.id)

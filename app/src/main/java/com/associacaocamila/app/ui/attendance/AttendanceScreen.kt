@@ -317,11 +317,16 @@ fun AttendanceContent(
         } else if (uiState.isReadOnly && !uiState.isDateHasRecord) {
             NoAttendanceForDateState(modifier = Modifier.weight(1f))
         } else {
+            // Lista de participantes matriculados (Alunos e Dependentes desduplicados)
+            val uniqueStudents = remember(uiState.participants) {
+                uiState.participants.distinctBy { it.id }
+            }
+
             // Controles rápidos e resumo
             val presentCount = uiState.statusMap.values.count { it == AttendanceStatus.PRESENTE }
             val justifiedCount = uiState.statusMap.values.count { it == AttendanceStatus.JUSTIFICADO }
             val absenceCount = uiState.statusMap.values.count { it == AttendanceStatus.FALTA }
-            val totalCount = uiState.participants.size
+            val totalCount = uniqueStudents.size
 
             Row(
                 modifier = Modifier
@@ -360,7 +365,6 @@ fun AttendanceContent(
                 }
             }
 
-            // Lista de participantes matriculados (Alunos e Dependentes)
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -369,8 +373,8 @@ fun AttendanceContent(
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 items(
-                    items = uiState.participants,
-                    key = { it.id }
+                    items = uniqueStudents,
+                    key = { "${it.id}_${it.name}" }
                 ) { participant ->
                     val status = uiState.statusMap[participant.id] ?: AttendanceStatus.PRESENTE
                     val isPresent = uiState.attendanceMap[participant.id] ?: (status == AttendanceStatus.PRESENTE)

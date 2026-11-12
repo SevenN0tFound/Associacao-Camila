@@ -68,10 +68,11 @@ class AttendanceRepositoryImpl(
 
     override suspend fun getStudentsForWorkshop(studentIds: List<String>): Result<List<User>> =
         runCatching {
-            if (studentIds.isEmpty()) return@runCatching emptyList()
+            val distinctIds = studentIds.distinct().filter { it.isNotBlank() }
+            if (distinctIds.isEmpty()) return@runCatching emptyList()
 
             // Consulta particionada para respeitar o limite de 30 IDs do whereIn do Firestore
-            studentIds.chunked(30).flatMap { chunk ->
+            distinctIds.chunked(30).flatMap { chunk ->
                 usersCollection
                     .whereIn(FieldPath.documentId(), chunk)
                     .get()
@@ -84,17 +85,18 @@ class AttendanceRepositoryImpl(
                             null
                         }
                     }
-            }
+            }.distinctBy { it.id }
         }
 
     override suspend fun getParticipantsForWorkshop(participantIds: List<String>): Result<List<EligibleParticipant>> =
         runCatching {
-            if (participantIds.isEmpty()) return@runCatching emptyList()
+            val distinctIds = participantIds.distinct().filter { it.isNotBlank() }
+            if (distinctIds.isEmpty()) return@runCatching emptyList()
 
-            val participantIdSet = participantIds.toSet()
+            val participantIdSet = distinctIds.toSet()
 
             // 1. Busca usuários correspondentes diretamente por ID (Alunos)
-            val usersList = participantIds.chunked(30).flatMap { chunk ->
+            val usersList = distinctIds.chunked(30).flatMap { chunk ->
                 usersCollection
                     .whereIn(FieldPath.documentId(), chunk)
                     .get()
@@ -133,7 +135,7 @@ class AttendanceRepositoryImpl(
                 responsiblesSnapshot.documents.flatMap { doc ->
                     val responsible = try {
                         doc.toObject(User::class.java)?.copy(id = doc.id)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         null
                     } ?: return@flatMap emptyList()
                     responsible.dependents
@@ -153,9 +155,9 @@ class AttendanceRepositoryImpl(
                 emptyList()
             }
 
-            // Preserva a ordem informada em participantIds
+            // Preserva a ordem informada em distinctIds e desduplica
             val allMap = (studentParticipants + dependentParticipants).associateBy { it.id }
-            participantIds.mapNotNull { allMap[it] }
+            distinctIds.mapNotNull { allMap[it] }.distinctBy { it.id }
         }
 
     override suspend fun saveAttendanceRecord(record: AttendanceRecord): Result<Unit> =
