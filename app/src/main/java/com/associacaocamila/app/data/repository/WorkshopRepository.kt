@@ -41,15 +41,24 @@ class WorkshopRepositoryImpl(
             }
             val list = snapshot?.documents?.mapNotNull { doc ->
                 try {
-                    doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                    val w = doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                    val rawList = (doc.get("enrolledStudentIds") as? List<*>)
+                        ?: (doc.get("studentIds") as? List<*>)
+                        ?: w?.enrolledStudentIds
+                        ?: emptyList<Any>()
+                    val dedupedIds = rawList.filterIsInstance<String>().distinct().filter { it.isNotBlank() }
+                    w?.copy(enrolledStudentIds = dedupedIds)
                 } catch (_: Exception) {
                     try {
+                        val rawList = (doc.get("enrolledStudentIds") as? List<*>)
+                            ?: (doc.get("studentIds") as? List<*>)
+                            ?: emptyList<Any>()
                         Workshop(
                             id = doc.id,
                             name = doc.getString("name").orEmpty(),
                             description = doc.getString("description").orEmpty(),
                             teacherId = doc.getString("teacherId").orEmpty(),
-                            enrolledStudentIds = (doc.get("enrolledStudentIds") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            enrolledStudentIds = rawList.filterIsInstance<String>().distinct().filter { it.isNotBlank() },
                             isRegistrationOpen = doc.getBoolean("isRegistrationOpen") ?: true,
                             registrationDeadline = doc.getLong("registrationDeadline"),
                             maxCapacity = doc.getLong("maxCapacity")?.toInt() ?: 0,
@@ -70,13 +79,19 @@ class WorkshopRepositoryImpl(
         } else {
             workshopsCollection.document()
         }
-        val itemToSave = if (workshop.id.isBlank()) workshop.copy(id = docRef.id) else workshop
-        docRef.set(itemToSave).await()
+        val sanitized = workshop.copy(
+            id = if (workshop.id.isBlank()) docRef.id else workshop.id,
+            enrolledStudentIds = workshop.enrolledStudentIds.distinct().filter { it.isNotBlank() }
+        )
+        docRef.set(sanitized).await()
     }
 
     override suspend fun updateWorkshop(workshop: Workshop): Result<Unit> = runCatching {
         require(workshop.id.isNotBlank()) { "ID da oficina não pode ser vazio para atualização." }
-        workshopsCollection.document(workshop.id).set(workshop).await()
+        val sanitized = workshop.copy(
+            enrolledStudentIds = workshop.enrolledStudentIds.distinct().filter { it.isNotBlank() }
+        )
+        workshopsCollection.document(sanitized.id).set(sanitized).await()
     }
 
     override suspend fun deleteWorkshop(workshopId: String): Result<Unit> = runCatching {

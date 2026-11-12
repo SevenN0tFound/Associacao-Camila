@@ -314,15 +314,23 @@ class AttendanceViewModel(
 
             val recordId = _uiState.value.currentRecord?.id?.ifBlank { "" } ?: ""
             val currentStatuses = _uiState.value.statusMap
-            val statusMapToSave = _uiState.value.attendanceMap.mapValues { (id, isPresent) ->
-                val existing = currentStatuses[id]
-                if (existing == AttendanceStatus.JUSTIFICADO) {
+            val distinctParticipants = _uiState.value.participants.distinctBy { it.id }
+
+            val statusMapToSave = distinctParticipants.associate { p ->
+                val existing = currentStatuses[p.id]
+                val isPresent = _uiState.value.attendanceMap[p.id] ?: true
+                val statusName = if (existing == AttendanceStatus.JUSTIFICADO) {
                     AttendanceStatus.JUSTIFICADO.name
                 } else if (isPresent) {
                     AttendanceStatus.PRESENTE.name
                 } else {
                     AttendanceStatus.FALTA.name
                 }
+                p.id to statusName
+            }
+
+            val attendanceMapToSave = distinctParticipants.associate { p ->
+                p.id to (_uiState.value.attendanceMap[p.id] ?: true)
             }
 
             val record = AttendanceRecord(
@@ -330,7 +338,7 @@ class AttendanceViewModel(
                 workshopId = currentWorkshop.id,
                 dateMillis = _uiState.value.selectedDateMillis,
                 teacherId = teacherId,
-                attendanceMap = _uiState.value.attendanceMap,
+                attendanceMap = attendanceMapToSave,
                 statusMap = statusMapToSave
             )
 
@@ -441,7 +449,9 @@ class AttendanceViewModel(
                     }
 
                     runCatching {
-                        val studentsMap = _uiState.value.participants.associateBy({ it.id }, { it.name })
+                        val studentsMap = _uiState.value.participants
+                            .distinctBy { it.id }
+                            .associateBy({ it.id }, { it.name })
                         val file = WorkshopReportPdfGenerator.generateAttendancePdf(
                             context = context,
                             workshop = workshop,

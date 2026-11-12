@@ -45,15 +45,24 @@ class AttendanceRepositoryImpl(
             }
             val workshops = snapshot?.documents?.mapNotNull { doc ->
                 try {
-                    doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                    val w = doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                    val rawList = (doc.get("enrolledStudentIds") as? List<*>)
+                        ?: (doc.get("studentIds") as? List<*>)
+                        ?: w?.enrolledStudentIds
+                        ?: emptyList<Any>()
+                    val dedupedIds = rawList.filterIsInstance<String>().distinct().filter { it.isNotBlank() }
+                    w?.copy(enrolledStudentIds = dedupedIds)
                 } catch (e: Exception) {
                     try {
+                        val rawList = (doc.get("enrolledStudentIds") as? List<*>)
+                            ?: (doc.get("studentIds") as? List<*>)
+                            ?: emptyList<Any>()
                         Workshop(
                             id = doc.id,
                             name = doc.getString("name").orEmpty(),
                             description = doc.getString("description").orEmpty(),
                             teacherId = doc.getString("teacherId").orEmpty(),
-                            enrolledStudentIds = (doc.get("enrolledStudentIds") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            enrolledStudentIds = rawList.filterIsInstance<String>().distinct().filter { it.isNotBlank() },
                             isRegistrationOpen = doc.getBoolean("isRegistrationOpen") ?: true,
                             registrationDeadline = doc.getLong("registrationDeadline"),
                             maxCapacity = doc.getLong("maxCapacity")?.toInt() ?: 0,
@@ -169,7 +178,15 @@ class AttendanceRepositoryImpl(
             } else {
                 attendancesCollection.document()
             }
-            val recordToSave = if (record.id.isBlank()) record.copy(id = docRef.id) else record
+            // Saneamento e desduplicação dos mapas de chamada antes de persistir no Firestore
+            val sanitizedAttendanceMap = record.attendanceMap.filterKeys { it.isNotBlank() }
+            val sanitizedStatusMap = record.statusMap.filterKeys { it.isNotBlank() }
+
+            val recordToSave = record.copy(
+                id = if (record.id.isBlank()) docRef.id else record.id,
+                attendanceMap = sanitizedAttendanceMap,
+                statusMap = sanitizedStatusMap
+            )
             docRef.set(recordToSave).await()
         }
 

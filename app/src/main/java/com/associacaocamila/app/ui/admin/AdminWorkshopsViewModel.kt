@@ -123,7 +123,7 @@ class AdminWorkshopsViewModel(
                 name = name.trim(),
                 description = description.trim(),
                 teacherId = teacherId.trim(),
-                enrolledStudentIds = selectedStudentIds,
+                enrolledStudentIds = selectedStudentIds.distinct().filter { it.isNotBlank() },
                 isRegistrationOpen = isRegistrationOpen,
                 registrationDeadline = registrationDeadline,
                 maxCapacity = maxCapacity
@@ -181,6 +181,7 @@ class AdminWorkshopsViewModel(
                     name = workshop.name.trim(),
                     description = workshop.description.trim(),
                     teacherId = workshop.teacherId.trim(),
+                    enrolledStudentIds = workshop.enrolledStudentIds.distinct().filter { it.isNotBlank() },
                 )
             )
                 .onSuccess {

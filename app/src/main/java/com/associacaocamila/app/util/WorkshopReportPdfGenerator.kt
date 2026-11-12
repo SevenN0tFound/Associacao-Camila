@@ -36,9 +36,19 @@ object WorkshopReportPdfGenerator {
     private val COLOR_ABSENT_BG = Color.parseColor("#FFEBEE")
     private val COLOR_ABSENT_TEXT = Color.parseColor("#C62828")
 
+    private data class ParticipantReportRow(
+        val studentId: String,
+        val studentName: String,
+        val totalRecorded: Int,
+        val presenceCount: Int,
+        val absenceCount: Int,
+        val presencePercent: Int,
+        val isPresentSituation: Boolean,
+    )
+
     /**
      * Gera o relatório de frequência em PDF para a oficina selecionada com suporte a período customizado,
-     * resumo consolidado de presenças/faltas e badges explícitos para cada aluno.
+     * resumo consolidado de presenças/faltas, desduplicação rigorosa de participantes e badges explícitos para cada aluno.
      */
     suspend fun generateAttendancePdf(
         context: Context,
@@ -56,34 +66,63 @@ object WorkshopReportPdfGenerator {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // 1. Identificação completa de participantes (matriculados + histórico)
-        val allStudentIds = (workshop.enrolledStudentIds + studentsMap.keys + records.flatMap { it.attendanceMap.keys })
+        // 1. Desduplicação dos Participantes no Relatório (Matriculados + Histórico de Chamadas)
+        val uniqueEnrolledIds = workshop.enrolledStudentIds.distinct().filter { it.isNotBlank() }
+        val uniqueStudentIds = (uniqueEnrolledIds + studentsMap.keys + records.flatMap { it.attendanceMap.keys + it.statusMap.keys })
             .distinct()
             .filter { it.isNotBlank() }
 
-        // 2. Cálculo do Resumo Consolidado (Total de Registros, Presenças, Faltas e Assiduidade)
-        var globalPresences = 0
-        var globalAbsences = 0
+        // Consolida os dados individuais por participante aplicando .distinctBy { it.studentId }
+        val uniqueParticipants: List<ParticipantReportRow> = uniqueStudentIds.map { sId ->
+            val rawName = studentsMap[sId]?.takeIf { it.isNotBlank() } ?: "Aluno ($sId)"
+            var presenceCount = 0
+            var absenceCount = 0
 
-        records.forEach { record ->
-            val evaluatedIds = (record.attendanceMap.keys + record.statusMap.keys).distinct().filter { it.isNotBlank() }
-            evaluatedIds.forEach { sId ->
-                val isPres = record.attendanceMap[sId]
-                if (isPres == true) {
-                    globalPresences++
-                } else if (isPres == false) {
-                    globalAbsences++
+            records.forEach { record ->
+                val isPresent = record.attendanceMap[sId]
+                if (isPresent == true) {
+                    presenceCount++
+                } else if (isPresent == false) {
+                    absenceCount++
                 } else {
                     val status = record.statusMap[sId]
                     if (status?.equals("PRESENTE", ignoreCase = true) == true) {
-                        globalPresences++
+                        presenceCount++
                     } else if (status?.equals("FALTA", ignoreCase = true) == true) {
-                        globalAbsences++
+                        absenceCount++
                     }
                 }
             }
-        }
 
+            val totalRecorded = presenceCount + absenceCount
+            val presencePercent = if (totalRecorded > 0) {
+                (presenceCount.toFloat() / totalRecorded * 100).toInt()
+            } else {
+                0
+            }
+
+            val isPresentSituation = if (records.size == 1) {
+                presenceCount > 0
+            } else {
+                presenceCount >= absenceCount && totalRecorded > 0
+            }
+
+            ParticipantReportRow(
+                studentId = sId,
+                studentName = rawName,
+                totalRecorded = totalRecorded,
+                presenceCount = presenceCount,
+                absenceCount = absenceCount,
+                presencePercent = presencePercent,
+                isPresentSituation = isPresentSituation,
+            )
+        }
+            .distinctBy { it.studentId }
+            .sortedBy { it.studentName.lowercase() }
+
+        // 2. Cálculo do Resumo Consolidado baseado na lista de participantes desduplicada
+        val globalPresences = uniqueParticipants.sumOf { it.presenceCount }
+        val globalAbsences = uniqueParticipants.sumOf { it.absenceCount }
         val globalTotalRecords = globalPresences + globalAbsences
         val globalAssiduidade = if (globalTotalRecords > 0) {
             (globalPresences.toFloat() / globalTotalRecords * 100).toInt()
@@ -204,7 +243,8 @@ object WorkshopReportPdfGenerator {
         val totalClassesWidth = textPaint.measureText(totalClassesStr)
         canvas.drawText(totalClassesStr, endX - 12f - totalClassesWidth, currentY + 34f, textPaint)
 
-        val totalStudentsStr = "Alunos Identificados: ${allStudentIds.size}"
+        // Contador do cabeçalho refletindo exatamente o tamanho da lista desduplicada
+        val totalStudentsStr = "Participantes Matriculados: ${uniqueParticipants.size}"
         val totalStudentsWidth = textPaint.measureText(totalStudentsStr)
         canvas.drawText(totalStudentsStr, endX - 12f - totalStudentsWidth, currentY + 48f, textPaint)
 
@@ -272,18 +312,18 @@ object WorkshopReportPdfGenerator {
         // 6. Cabeçalho da Tabela
         currentY = drawTableHeader(canvas, currentY)
 
-        // 7. Linhas dos Alunos com Situação Explícita ("PRESENTE" / "FALTA")
+        // 7. Linhas dos Alunos Desduplicados com Situação Explícita ("PRESENTE" / "FALTA")
         val rowHeight = 22f
 
-        if (allStudentIds.isEmpty()) {
+        if (uniqueParticipants.isEmpty()) {
             paint.color = COLOR_ZEBRA
             canvas.drawRect(startX, currentY, endX, currentY + rowHeight + 10f, paint)
             textPaint.color = COLOR_GRAY
             textPaint.textSize = 9.5f
-            canvas.drawText("Nenhum participante ou registro de frequência localizado.", startX + 12f, currentY + 18f, textPaint)
+            canvas.drawText("Nenhum participante matriculado nesta oficina ou registros encontrados.", startX + 12f, currentY + 18f, textPaint)
             currentY += rowHeight + 10f
         } else {
-            allStudentIds.forEachIndexed { index, studentId ->
+            uniqueParticipants.forEachIndexed { index, participant ->
                 // Quebra de página caso ultrapasse o limite superior da área de rodapé
                 if (currentY + rowHeight > PAGE_HEIGHT - footerAreaHeight) {
                     pdfDocument.finishPage(page)
@@ -302,34 +342,6 @@ object WorkshopReportPdfGenerator {
                     currentY = drawTableHeader(canvas, 44f)
                 }
 
-                val studentName = studentsMap[studentId] ?: "Aluno ($studentId)"
-
-                var presenceCount = 0
-                var absenceCount = 0
-
-                records.forEach { record ->
-                    val isPresent = record.attendanceMap[studentId]
-                    if (isPresent == true) {
-                        presenceCount++
-                    } else if (isPresent == false) {
-                        absenceCount++
-                    } else {
-                        val status = record.statusMap[studentId]
-                        if (status?.equals("PRESENTE", ignoreCase = true) == true) {
-                            presenceCount++
-                        } else if (status?.equals("FALTA", ignoreCase = true) == true) {
-                            absenceCount++
-                        }
-                    }
-                }
-
-                val totalRecorded = presenceCount + absenceCount
-                val presencePercent = if (totalRecorded > 0) {
-                    (presenceCount.toFloat() / totalRecorded * 100).toInt()
-                } else {
-                    0
-                }
-
                 // Fundo zebrado
                 if (index % 2 == 1) {
                     paint.color = COLOR_ZEBRA
@@ -344,17 +356,17 @@ object WorkshopReportPdfGenerator {
                 textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 textPaint.textAlign = Paint.Align.LEFT
 
-                val truncatedName = if (studentName.length > 30) studentName.take(28) + "..." else studentName
+                val truncatedName = if (participant.studentName.length > 30) participant.studentName.take(28) + "..." else participant.studentName
                 canvas.drawText(truncatedName, startX + 8f, currentY + 15f, textPaint)
 
-                canvas.drawText(totalRecorded.toString(), startX + 230f, currentY + 15f, textPaint)
-                canvas.drawText(presenceCount.toString(), startX + 285f, currentY + 15f, textPaint)
-                canvas.drawText(absenceCount.toString(), startX + 348f, currentY + 15f, textPaint)
+                canvas.drawText(participant.totalRecorded.toString(), startX + 230f, currentY + 15f, textPaint)
+                canvas.drawText(participant.presenceCount.toString(), startX + 285f, currentY + 15f, textPaint)
+                canvas.drawText(participant.absenceCount.toString(), startX + 348f, currentY + 15f, textPaint)
 
-                if (totalRecorded > 0) {
-                    textPaint.color = if (presencePercent >= 75) COLOR_PRIMARY_DARK else Color.parseColor("#D32F2F")
+                if (participant.totalRecorded > 0) {
+                    textPaint.color = if (participant.presencePercent >= 75) COLOR_PRIMARY_DARK else Color.parseColor("#D32F2F")
                     textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    canvas.drawText("$presencePercent%", startX + 402f, currentY + 15f, textPaint)
+                    canvas.drawText("${participant.presencePercent}%", startX + 402f, currentY + 15f, textPaint)
                     textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 } else {
                     textPaint.color = COLOR_GRAY
@@ -367,13 +379,7 @@ object WorkshopReportPdfGenerator {
                 val badgeTop = currentY + 3f
                 val badgeBottom = currentY + rowHeight - 3f
 
-                val isPresentSituation = if (records.size == 1) {
-                    presenceCount > 0
-                } else {
-                    presenceCount >= absenceCount && totalRecorded > 0
-                }
-
-                if (totalRecorded == 0) {
+                if (participant.totalRecorded == 0) {
                     paint.color = Color.parseColor("#EEEEEE")
                     canvas.drawRoundRect(badgeX, badgeTop, badgeX + badgeWidth, badgeBottom, 4f, 4f, paint)
 
@@ -382,7 +388,7 @@ object WorkshopReportPdfGenerator {
                     textPaint.color = Color.parseColor("#757575")
                     textPaint.textAlign = Paint.Align.CENTER
                     canvas.drawText("S/ REGISTRO", badgeX + (badgeWidth / 2f), currentY + 14.5f, textPaint)
-                } else if (isPresentSituation) {
+                } else if (participant.isPresentSituation) {
                     paint.color = COLOR_PRESENT_BG
                     canvas.drawRoundRect(badgeX, badgeTop, badgeX + badgeWidth, badgeBottom, 4f, 4f, paint)
 

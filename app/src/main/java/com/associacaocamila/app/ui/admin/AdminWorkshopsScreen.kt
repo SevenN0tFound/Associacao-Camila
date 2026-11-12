@@ -1543,7 +1543,7 @@ private fun EditWorkshopBottomSheet(
                             name = name.trim(),
                             description = description.trim(),
                             teacherId = selectedTeacherId.trim(),
-                            enrolledStudentIds = selectedStudentIds.toList(),
+                            enrolledStudentIds = selectedStudentIds.toList().distinct().filter { it.isNotBlank() },
                             isRegistrationOpen = isRegistrationOpen,
                             registrationDeadline = registrationDeadline,
                             maxCapacity = maxCapacityText.toIntOrNull() ?: 0
