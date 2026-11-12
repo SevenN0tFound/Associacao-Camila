@@ -33,7 +33,11 @@ class StudentPortalRepositoryImpl(
                 return@addSnapshotListener
             }
             val workshops = snapshot?.documents?.mapNotNull { doc ->
-                doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                try {
+                    doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                } catch (_: Exception) {
+                    null
+                }
             }.orEmpty()
             trySend(workshops)
         }
@@ -54,7 +58,11 @@ class StudentPortalRepositoryImpl(
             }
 
             val records = snapshot?.documents?.mapNotNull { doc ->
-                doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                try {
+                    doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                } catch (_: Exception) {
+                    null
+                }
             }.orEmpty()
 
             // Filtra os registros que contêm o estudante no mapa de chamada e ordena pelas mais recentes

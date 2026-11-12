@@ -781,7 +781,7 @@ private fun CreateWorkshopBottomSheet(
                     )
                 }
             } else {
-                val selectedTeacher = teachers.firstOrNull { it.id == selectedTeacherId } ?: teachers.first()
+                val selectedTeacher = teachers.firstOrNull { it.id == selectedTeacherId } ?: teachers.firstOrNull()
 
                 ExposedDropdownMenuBox(
                     expanded = teacherDropdownExpanded,
@@ -789,7 +789,7 @@ private fun CreateWorkshopBottomSheet(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = selectedTeacher.name,
+                        value = selectedTeacher?.name.orEmpty(),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = {
@@ -811,8 +811,8 @@ private fun CreateWorkshopBottomSheet(
                                 text = {
                                     Text(
                                         text = teacher.name,
-                                        fontWeight = if (teacher.id == selectedTeacher.id) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (teacher.id == selectedTeacher.id) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
+                                        fontWeight = if (teacher.id == selectedTeacher?.id) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (teacher.id == selectedTeacher?.id) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
                                     )
                                 },
                                 onClick = {
@@ -1235,7 +1235,7 @@ private fun EditWorkshopBottomSheet(
                     )
                 }
             } else {
-                val selectedTeacher = teachers.firstOrNull { it.id == selectedTeacherId } ?: teachers.first()
+                val selectedTeacher = teachers.firstOrNull { it.id == selectedTeacherId } ?: teachers.firstOrNull()
 
                 ExposedDropdownMenuBox(
                     expanded = teacherDropdownExpanded,
@@ -1243,7 +1243,7 @@ private fun EditWorkshopBottomSheet(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = selectedTeacher.name,
+                        value = selectedTeacher?.name.orEmpty(),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = {
@@ -1265,8 +1265,8 @@ private fun EditWorkshopBottomSheet(
                                 text = {
                                     Text(
                                         text = teacher.name,
-                                        fontWeight = if (teacher.id == selectedTeacher.id) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (teacher.id == selectedTeacher.id) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
+                                        fontWeight = if (teacher.id == selectedTeacher?.id) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (teacher.id == selectedTeacher?.id) CamilaGreenDark else MaterialTheme.colorScheme.onSurface
                                     )
                                 },
                                 onClick = {

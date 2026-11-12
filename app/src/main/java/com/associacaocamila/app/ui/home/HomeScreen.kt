@@ -523,7 +523,10 @@ fun HomeScreen(
                     )
                     is NavigationItem.MinhasOficinas -> StudentWorkshopsScreen(currentUser = userState)
                     is NavigationItem.Frequencia -> StudentAttendanceScreen(currentUser = userState)
-                    is NavigationItem.Chamada -> AttendanceScreen(teacherId = userState.id)
+                    is NavigationItem.Chamada -> AttendanceScreen(
+                        teacherId = userState.id,
+                        currentUser = userState,
+                    )
                     is NavigationItem.Aprovacoes -> AdminApprovalsScreen(currentUser = userState)
                     is NavigationItem.Turmas -> AdminWorkshopsScreen()
                     is NavigationItem.AgendamentoVan -> VanBookingScreen(

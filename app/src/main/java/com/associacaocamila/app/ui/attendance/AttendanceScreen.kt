@@ -37,7 +37,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -85,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.associacaocamila.app.data.model.AttendanceStatus
 import com.associacaocamila.app.data.model.EligibleParticipant
+import com.associacaocamila.app.data.model.User
 import com.associacaocamila.app.data.model.Workshop
 import com.associacaocamila.app.ui.theme.AssociacaoCamilaTheme
 import com.associacaocamila.app.ui.theme.BackgroundLight
@@ -100,7 +103,8 @@ import java.util.TimeZone
 
 @Composable
 fun AttendanceScreen(
-    teacherId: String,
+    teacherId: String = "",
+    currentUser: User? = null,
     modifier: Modifier = Modifier,
     viewModel: AttendanceViewModel = viewModel(),
 ) {
@@ -108,8 +112,12 @@ fun AttendanceScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(teacherId) {
-        viewModel.loadWorkshops(teacherId)
+    val effectiveTeacherId = remember(teacherId, currentUser) {
+        teacherId.ifBlank { currentUser?.id.orEmpty() }
+    }
+
+    LaunchedEffect(effectiveTeacherId) {
+        viewModel.loadWorkshops(effectiveTeacherId)
     }
 
     LaunchedEffect(uiState.userMessage) {
@@ -135,10 +143,11 @@ fun AttendanceScreen(
             onSelectDate = { viewModel.selectDate(it) },
             onSetAttendance = { studentId, isPresent -> viewModel.setStudentAttendance(studentId, isPresent) },
             onMarkAll = { viewModel.markAll(it) },
-            onSubmitAttendance = { viewModel.submitAttendance(teacherId, context) },
+            onSubmitAttendance = { viewModel.submitAttendance(effectiveTeacherId, context) },
             onExportPdf = { startMillis, endMillis ->
                 viewModel.exportAttendancePdf(context, startMillis, endMillis)
             },
+            onRetry = { viewModel.loadWorkshops(effectiveTeacherId) },
         )
 
         SnackbarHost(
@@ -161,8 +170,10 @@ fun AttendanceContent(
     onMarkAll: (Boolean) -> Unit,
     onSubmitAttendance: () -> Unit,
     onExportPdf: (startDateMillis: Long, endDateMillis: Long) -> Unit,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    // 1. Estado de Carregamento (Loading)
     if (uiState.isLoadingWorkshops) {
         Box(
             modifier = modifier
@@ -170,19 +181,41 @@ fun AttendanceContent(
                 .background(BackgroundLight),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                color = CamilaGreen,
-                strokeWidth = 3.dp
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CircularProgressIndicator(
+                    color = CamilaGreen,
+                    strokeWidth = 3.dp
+                )
+                Text(
+                    text = "Carregando turmas da chamada...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CamilaGray
+                )
+            }
         }
         return
     }
 
+    // 2. Estado de Erro Seguro (Error): Falha na consulta de oficinas no Firestore
+    if (uiState.errorMessage != null && uiState.workshops.isEmpty()) {
+        AttendanceErrorState(
+            message = uiState.errorMessage,
+            onRetry = onRetry,
+            modifier = modifier
+        )
+        return
+    }
+
+    // 3. Estado Vazio Seguro (Empty): Professor sem turmas vinculadas
     if (uiState.workshops.isEmpty()) {
         EmptyWorkshopsState(modifier = modifier)
         return
     }
 
+    // 4. Estado de Sucesso (Success): Interface completa da chamada digital
     val isTodayDate = remember(uiState.selectedDateMillis) {
         val cal1 = Calendar.getInstance().apply { timeInMillis = uiState.selectedDateMillis }
         val cal2 = Calendar.getInstance()
@@ -1058,13 +1091,12 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundLight),
+            .background(BackgroundLight)
+            .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1091,7 +1123,7 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Nenhuma oficina atribuída",
+                    text = "Nenhuma oficina vinculada",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = CamilaGreenDark,
                     textAlign = TextAlign.Center
@@ -1100,12 +1132,91 @@ private fun EmptyWorkshopsState(modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Você não está vinculado como professor a nenhuma oficina ativa no momento.",
+                    text = "Você ainda não possui oficinas vinculadas. Solicite à coordenação para associar suas turmas.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = CamilaGray,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttendanceErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(BackgroundLight)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                Text(
+                    text = "Não foi possível carregar as turmas",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CamilaGreenDark,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = message.ifBlank { "Ocorreu uma falha ao consultar suas oficinas no servidor. Verifique sua conexão e tente novamente." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CamilaGray,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = CamilaGreen),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Tentar Novamente",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

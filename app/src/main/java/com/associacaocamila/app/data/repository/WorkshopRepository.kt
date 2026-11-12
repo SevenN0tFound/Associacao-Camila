@@ -40,7 +40,24 @@ class WorkshopRepositoryImpl(
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { doc ->
-                doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                try {
+                    doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                } catch (_: Exception) {
+                    try {
+                        Workshop(
+                            id = doc.id,
+                            name = doc.getString("name").orEmpty(),
+                            description = doc.getString("description").orEmpty(),
+                            teacherId = doc.getString("teacherId").orEmpty(),
+                            enrolledStudentIds = (doc.get("enrolledStudentIds") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            isRegistrationOpen = doc.getBoolean("isRegistrationOpen") ?: true,
+                            registrationDeadline = doc.getLong("registrationDeadline"),
+                            maxCapacity = doc.getLong("maxCapacity")?.toInt() ?: 0,
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             }.orEmpty()
             trySend(list)
         }
@@ -101,7 +118,11 @@ class WorkshopRepositoryImpl(
             .await()
 
         snapshot.documents.mapNotNull { doc ->
-            doc.toObject(User::class.java)?.copy(id = doc.id)
+            try {
+                doc.toObject(User::class.java)?.copy(id = doc.id)
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -113,7 +134,11 @@ class WorkshopRepositoryImpl(
             .await()
 
         snapshot.documents.mapNotNull { doc ->
-            doc.toObject(User::class.java)?.copy(id = doc.id)
+            try {
+                doc.toObject(User::class.java)?.copy(id = doc.id)
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -126,7 +151,11 @@ class WorkshopRepositoryImpl(
             .await()
 
         val students = studentsSnapshot.documents.mapNotNull { doc ->
-            doc.toObject(User::class.java)?.copy(id = doc.id)
+            try {
+                doc.toObject(User::class.java)?.copy(id = doc.id)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         // Busca usuários com perfil RESPONSAVEL aprovados para extrair seus dependentes e vínculos
@@ -137,7 +166,11 @@ class WorkshopRepositoryImpl(
             .await()
 
         val responsibles = responsiblesSnapshot.documents.mapNotNull { doc ->
-            doc.toObject(User::class.java)?.copy(id = doc.id)
+            try {
+                doc.toObject(User::class.java)?.copy(id = doc.id)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         // Mapeia vínculos de responsáveis por ID do aluno e por Nome

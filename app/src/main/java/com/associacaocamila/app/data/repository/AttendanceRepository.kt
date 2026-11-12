@@ -30,6 +30,11 @@ class AttendanceRepositoryImpl(
     private val attendancesCollection get() = firestore.collection(ATTENDANCES_COLLECTION)
 
     override fun getTeacherWorkshops(teacherId: String): Flow<List<Workshop>> = callbackFlow {
+        if (teacherId.isBlank()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val query = workshopsCollection.whereEqualTo("teacherId", teacherId)
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -37,7 +42,24 @@ class AttendanceRepositoryImpl(
                 return@addSnapshotListener
             }
             val workshops = snapshot?.documents?.mapNotNull { doc ->
-                doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                try {
+                    doc.toObject(Workshop::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    try {
+                        Workshop(
+                            id = doc.id,
+                            name = doc.getString("name").orEmpty(),
+                            description = doc.getString("description").orEmpty(),
+                            teacherId = doc.getString("teacherId").orEmpty(),
+                            enrolledStudentIds = (doc.get("enrolledStudentIds") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            isRegistrationOpen = doc.getBoolean("isRegistrationOpen") ?: true,
+                            registrationDeadline = doc.getLong("registrationDeadline"),
+                            maxCapacity = doc.getLong("maxCapacity")?.toInt() ?: 0,
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             }.orEmpty()
             trySend(workshops)
         }
@@ -56,7 +78,11 @@ class AttendanceRepositoryImpl(
                     .await()
                     .documents
                     .mapNotNull { doc ->
-                        doc.toObject(User::class.java)?.copy(id = doc.id)
+                        try {
+                            doc.toObject(User::class.java)?.copy(id = doc.id)
+                        } catch (_: Exception) {
+                            null
+                        }
                     }
             }
         }
@@ -75,7 +101,11 @@ class AttendanceRepositoryImpl(
                     .await()
                     .documents
                     .mapNotNull { doc ->
-                        doc.toObject(User::class.java)?.copy(id = doc.id)
+                        try {
+                            doc.toObject(User::class.java)?.copy(id = doc.id)
+                        } catch (_: Exception) {
+                            null
+                        }
                     }
             }
 
@@ -101,7 +131,11 @@ class AttendanceRepositoryImpl(
                     .await()
 
                 responsiblesSnapshot.documents.flatMap { doc ->
-                    val responsible = doc.toObject(User::class.java)?.copy(id = doc.id) ?: return@flatMap emptyList()
+                    val responsible = try {
+                        doc.toObject(User::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        null
+                    } ?: return@flatMap emptyList()
                     responsible.dependents
                         .filter { it.id in remainingIds }
                         .map { dependent ->
@@ -137,13 +171,30 @@ class AttendanceRepositoryImpl(
 
     override suspend fun getAttendanceRecordsForWorkshop(workshopId: String): Result<List<AttendanceRecord>> =
         runCatching {
+            if (workshopId.isBlank()) return@runCatching emptyList()
             attendancesCollection
                 .whereEqualTo("workshopId", workshopId)
                 .get()
                 .await()
                 .documents
                 .mapNotNull { doc ->
-                    doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                    try {
+                        doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        try {
+                            @Suppress("UNCHECKED_CAST")
+                            AttendanceRecord(
+                                id = doc.id,
+                                workshopId = doc.getString("workshopId").orEmpty(),
+                                dateMillis = doc.getLong("dateMillis") ?: System.currentTimeMillis(),
+                                teacherId = doc.getString("teacherId").orEmpty(),
+                                attendanceMap = (doc.get("attendanceMap") as? Map<String, Boolean>) ?: emptyMap(),
+                                statusMap = (doc.get("statusMap") as? Map<String, String>) ?: emptyMap(),
+                            )
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
                 }
         }
 

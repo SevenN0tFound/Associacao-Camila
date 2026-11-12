@@ -52,7 +52,17 @@ class AttendanceViewModel(
     private var studentsJob: Job? = null
 
     fun loadWorkshops(teacherId: String) {
-        if (teacherId.isBlank()) return
+        if (teacherId.isBlank()) {
+            _uiState.update {
+                it.copy(
+                    isLoadingWorkshops = false,
+                    workshops = emptyList(),
+                    selectedWorkshop = null,
+                    errorMessage = null
+                )
+            }
+            return
+        }
         workshopsJob?.cancel()
         workshopsJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoadingWorkshops = true, errorMessage = null) }
@@ -67,19 +77,31 @@ class AttendanceViewModel(
                     }
                 }
                 .collect { workshops ->
-                    _uiState.update { current ->
-                        val currentSelected = current.selectedWorkshop
-                        val selected = workshops.firstOrNull { it.id == currentSelected?.id }
-                            ?: workshops.firstOrNull()
+                    val selected = workshops.firstOrNull { it.id == _uiState.value.selectedWorkshop?.id }
+                        ?: workshops.firstOrNull()
 
+                    _uiState.update { current ->
                         current.copy(
                             isLoadingWorkshops = false,
                             workshops = workshops,
-                            selectedWorkshop = selected
+                            selectedWorkshop = selected,
+                            errorMessage = null
                         )
                     }
 
-                    _uiState.value.selectedWorkshop?.let { loadStudentsAndRecords(it) }
+                    if (selected != null) {
+                        loadStudentsAndRecords(selected)
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isLoadingStudents = false,
+                                students = emptyList(),
+                                participants = emptyList(),
+                                attendanceMap = emptyMap(),
+                                statusMap = emptyMap()
+                            )
+                        }
+                    }
                 }
         }
     }

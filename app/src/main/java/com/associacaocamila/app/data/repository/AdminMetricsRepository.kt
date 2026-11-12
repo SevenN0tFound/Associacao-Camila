@@ -33,7 +33,11 @@ class AdminMetricsRepositoryImpl(
             .get()
             .await()
         for (doc in guardiansSnapshot.documents) {
-            val user = doc.toObject(User::class.java)
+            val user = try {
+                doc.toObject(User::class.java)
+            } catch (_: Exception) {
+                null
+            }
             user?.dependents?.forEach { dep ->
                 if (dep.id.isNotBlank()) allStudents.add(dep.id)
             }
@@ -63,7 +67,11 @@ class AdminMetricsRepositoryImpl(
         var absencesCount = 0
 
         for (doc in attendancesSnapshot.documents) {
-            val record = doc.toObject(AttendanceRecord::class.java) ?: continue
+            val record = try {
+                doc.toObject(AttendanceRecord::class.java)
+            } catch (_: Exception) {
+                null
+            } ?: continue
             val participants = (record.statusMap.keys + record.attendanceMap.keys).toSet()
             for (pId in participants) {
                 when (record.getParticipantStatus(pId)) {
