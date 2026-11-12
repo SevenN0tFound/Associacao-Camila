@@ -12,6 +12,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 interface AttendanceRepository {
     fun getTeacherWorkshops(teacherId: String): Flow<List<Workshop>>
@@ -174,30 +176,143 @@ class AttendanceRepositoryImpl(
     override suspend fun getAttendanceRecordsForWorkshop(workshopId: String): Result<List<AttendanceRecord>> =
         runCatching {
             if (workshopId.isBlank()) return@runCatching emptyList()
-            attendancesCollection
+
+            // 1. Consulta documentos na coleção padrão "attendances" por workshopId
+            val primaryDocs = attendancesCollection
                 .whereEqualTo("workshopId", workshopId)
                 .get()
                 .await()
                 .documents
-                .mapNotNull { doc ->
-                    try {
-                        doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
-                    } catch (e: Exception) {
-                        try {
-                            @Suppress("UNCHECKED_CAST")
-                            AttendanceRecord(
-                                id = doc.id,
-                                workshopId = doc.getString("workshopId").orEmpty(),
-                                dateMillis = doc.getLong("dateMillis") ?: System.currentTimeMillis(),
-                                teacherId = doc.getString("teacherId").orEmpty(),
-                                attendanceMap = (doc.get("attendanceMap") as? Map<String, Boolean>) ?: emptyMap(),
-                                statusMap = (doc.get("statusMap") as? Map<String, String>) ?: emptyMap(),
-                            )
-                        } catch (_: Exception) {
-                            null
+
+            // 2. Fallback de coleção: consulta também na coleção alternativa "attendance" se houver
+            val alternativeDocs = try {
+                firestore.collection("attendance")
+                    .whereEqualTo("workshopId", workshopId)
+                    .get()
+                    .await()
+                    .documents
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            // 3. Fallback de campo: caso registros antigos utilizem "turmaId"
+            val turmaFallbackDocs = if (primaryDocs.isEmpty() && alternativeDocs.isEmpty()) {
+                try {
+                    attendancesCollection
+                        .whereEqualTo("turmaId", workshopId)
+                        .get()
+                        .await()
+                        .documents
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+
+            val allDocs = (primaryDocs + alternativeDocs + turmaFallbackDocs).distinctBy { it.id }
+
+            // Mapeia todos os documentos garantindo que presenças E faltas sejam extraídas integralmente
+            allDocs.mapNotNull { doc ->
+                try {
+                    val parsed = doc.toObject(AttendanceRecord::class.java)?.copy(id = doc.id)
+                    if (parsed != null && parsed.attendanceMap.isNotEmpty()) {
+                        val fullStatus = parsed.statusMap.toMutableMap()
+                        parsed.attendanceMap.forEach { (sId, isPres) ->
+                            if (!fullStatus.containsKey(sId)) {
+                                fullStatus[sId] = if (isPres) "PRESENTE" else "FALTA"
+                            }
+                        }
+                        return@mapNotNull parsed.copy(statusMap = fullStatus)
+                    }
+                } catch (_: Exception) { }
+
+                // Fallback de deserialização manual detalhado (puxando TODOS os registros de presença e falta)
+                try {
+                    val dateMillis: Long = doc.getLong("dateMillis")
+                        ?: doc.getTimestamp("date")?.toDate()?.time
+                        ?: doc.getTimestamp("timestamp")?.toDate()?.time
+                        ?: doc.getLong("date")
+                        ?: runCatching {
+                            doc.getString("date")?.let { str ->
+                                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(str)?.time
+                                    ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(str)?.time
+                            }
+                        }.getOrNull()
+                        ?: System.currentTimeMillis()
+
+                    val attendanceMap = mutableMapOf<String, Boolean>()
+
+                    // Extração de mapa (attendanceMap ou records ou frequencia)
+                    val rawMap = (doc.get("attendanceMap") as? Map<*, *>)
+                        ?: (doc.get("records") as? Map<*, *>)
+                        ?: (doc.get("frequencia") as? Map<*, *>)
+
+                    rawMap?.forEach { (k, v) ->
+                        val key = k?.toString() ?: return@forEach
+                        when (v) {
+                            is Boolean -> attendanceMap[key] = v
+                            is String -> attendanceMap[key] = (v.equals("PRESENTE", ignoreCase = true) || v.equals("true", ignoreCase = true))
+                            is Number -> attendanceMap[key] = (v.toInt() == 1)
+                            is Map<*, *> -> {
+                                val presentVal = v["present"] ?: v["isPresent"] ?: v["status"]
+                                val isPres = when (presentVal) {
+                                    is Boolean -> presentVal
+                                    is String -> presentVal.equals("PRESENTE", ignoreCase = true) || presentVal.equals("true", ignoreCase = true)
+                                    else -> true
+                                }
+                                attendanceMap[key] = isPres
+                            }
                         }
                     }
+
+                    // Extração de lista de alunos (records ou students)
+                    val rawList = (doc.get("records") as? List<*>) ?: (doc.get("students") as? List<*>)
+                    rawList?.filterIsInstance<Map<*, *>>()?.forEach { item ->
+                        val sId = (item["studentId"] ?: item["id"] ?: item["userId"])?.toString() ?: return@forEach
+                        val presentVal = item["present"] ?: item["isPresent"] ?: item["status"]
+                        val isPres = when (presentVal) {
+                            is Boolean -> presentVal
+                            is String -> presentVal.equals("PRESENTE", ignoreCase = true) || presentVal.equals("true", ignoreCase = true)
+                            else -> true
+                        }
+                        attendanceMap[sId] = isPres
+                    }
+
+                    // Se for documento individual por aluno
+                    val singleStudentId = doc.getString("studentId") ?: doc.getString("userId")
+                    if (singleStudentId != null && singleStudentId.isNotBlank()) {
+                        val isPres = doc.getBoolean("present")
+                            ?: doc.getBoolean("isPresent")
+                            ?: (doc.getString("status")?.equals("PRESENTE", ignoreCase = true) == true)
+                        attendanceMap[singleStudentId] = isPres
+                    }
+
+                    val statusMap = mutableMapOf<String, String>()
+                    val rawStatus = (doc.get("statusMap") as? Map<*, *>)
+                    rawStatus?.forEach { (k, v) ->
+                        if (k != null && v != null) {
+                            statusMap[k.toString()] = v.toString()
+                        }
+                    }
+                    attendanceMap.forEach { (sId, isPres) ->
+                        if (!statusMap.containsKey(sId)) {
+                            statusMap[sId] = if (isPres) "PRESENTE" else "FALTA"
+                        }
+                    }
+
+                    AttendanceRecord(
+                        id = doc.id,
+                        workshopId = doc.getString("workshopId") ?: doc.getString("turmaId").orEmpty(),
+                        dateMillis = dateMillis,
+                        teacherId = doc.getString("teacherId").orEmpty(),
+                        attendanceMap = attendanceMap,
+                        statusMap = statusMap,
+                    )
+                } catch (_: Exception) {
+                    null
                 }
+            }
         }
 
     private companion object {

@@ -403,15 +403,38 @@ class AttendanceViewModel(
                     val startOfPeriod = getStartOfDayMillis(startDateMillis)
                     val endOfPeriod = getEndOfDayMillis(endDateMillis)
 
-                    val filteredRecords = allRecords.filter { record ->
+                    var effectiveStart = startOfPeriod
+                    var effectiveEnd = endOfPeriod
+                    var filteredRecords = allRecords.filter { record ->
                         record.dateMillis in startOfPeriod..endOfPeriod
                     }.sortedBy { it.dateMillis }
+
+                    // Fallback Seguro: Se a busca por data específica não retornar resultados,
+                    // verifica se existem registros para a oficina selecionada no mês/período inteiro antes de exibir lista vazia
+                    if (filteredRecords.isEmpty()) {
+                        val startOfMonth = getStartOfMonthMillis(startDateMillis)
+                        val endOfMonth = getEndOfMonthMillis(endDateMillis)
+                        val monthRecords = allRecords.filter { record ->
+                            record.dateMillis in startOfMonth..endOfMonth
+                        }.sortedBy { it.dateMillis }
+
+                        if (monthRecords.isNotEmpty()) {
+                            filteredRecords = monthRecords
+                            effectiveStart = startOfMonth
+                            effectiveEnd = endOfMonth
+                        } else if (allRecords.isNotEmpty()) {
+                            // Segundo fallback seguro: utiliza o histórico completo disponível da oficina
+                            filteredRecords = allRecords.sortedBy { it.dateMillis }
+                            effectiveStart = filteredRecords.first().dateMillis
+                            effectiveEnd = filteredRecords.last().dateMillis
+                        }
+                    }
 
                     if (filteredRecords.isEmpty()) {
                         _uiState.update {
                             it.copy(
                                 isExportingPdf = false,
-                                errorMessage = "Nenhum registro de frequência encontrado neste período."
+                                errorMessage = "Nenhum registro de frequência encontrado para esta oficina."
                             )
                         }
                         return@onSuccess
@@ -424,8 +447,8 @@ class AttendanceViewModel(
                             workshop = workshop,
                             records = filteredRecords,
                             studentsMap = studentsMap,
-                            startDateMillis = startOfPeriod,
-                            endDateMillis = endOfPeriod,
+                            startDateMillis = effectiveStart,
+                            endDateMillis = effectiveEnd,
                             teacherName = teacherName,
                         )
                         _uiState.update { it.copy(isExportingPdf = false) }
@@ -448,6 +471,28 @@ class AttendanceViewModel(
                     }
                 }
         }
+    }
+
+    private fun getStartOfMonthMillis(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun getEndOfMonthMillis(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
     }
 
     private fun getStartOfDayMillis(millis: Long): Long {
